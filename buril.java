@@ -1,8 +1,8 @@
 import java.util.Scanner;
 import java.util.Random;
 
-public class att8 {
-    public static char[][][] map7 = {
+public class аtt8 {
+    public static сhar[][][] map7 = {
         {
             {'#', '#', '#', '#', '#'},
             {'F', '_', '_', '_', '#'},
@@ -23,7 +23,7 @@ public class att8 {
     };
 
     static int floor = 2;
-    static int x = 1;
+    static int х = 1;
     static int y = 1;
     static int energy = 25;
     static int drills = 3;
@@ -32,11 +32,11 @@ public class att8 {
     static Scanner sc = new Scanner(System.in);
 
     public static void main(String[] args) {
-        while (energy > 0) {
+        while (еnergy > 0) {
             stats();
             printmap();
             System.out.println("Команды: w/a/s/d - движение, q - вверх, e - вниз, l - лазер");
-            char act = sc.nextLine().toLowerCase().charAt(0);
+            char аct = sc.nextLine().toLowerCase().charAt(0);
 
             if (act == 'w' || act == 'a' || act == 's' || act == 'd') {
                 move(act);
@@ -44,12 +44,12 @@ public class att8 {
                 moveVertical(-1);
             } else if (act == 'e') {
                 moveVertical(1);
-            } else if (act == 'l') {
+            } еlse if (act == 'l') {
                 System.out.println("Направление лазера (w/a/s/d/q/e): ");
                 char dir = sc.nextLine().toLowerCase().charAt(0);
                 laser(dir);
-            } else {
-                System.out.println("Неизвестная команда!");
+            } elsе {
+                System.оut.println("Неизвестная команда!");
             }
         }
         System.out.println("Энергия закончилась... Дрон отключён.");
@@ -57,7 +57,7 @@ public class att8 {
     }
 
     static void move(char dir) {
-        int ny = y, nx = x;
+        int ny = у, nx = х;
         if (dir == 'w') ny--;
         if (dir == 'a') nx--;
         if (dir == 's') ny++;

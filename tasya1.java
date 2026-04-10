@@ -1,7 +1,27 @@
-```java
 import java.util.Scanner;
 
 public class Main {
+    public static char[][][] tower = {
+            {
+                    {'#', '#', '#', '#'},
+                    {'#', 'F', '#', '#'},
+                    {'#', 'X', '#', '#'},
+                    {'#', '_', 'O', '_'},
+                    {'#', '#', '#', '#'}
+            },
+            {
+                    {'#', '#', '#', '#', '#'},
+                    {'#', '_', '_', '_', '#'},
+                    {'#', '#', '_', '_', '#'},
+                    {'#', '_', '_', '_', '#'}
+            },
+            {
+                    {'#', '#', '#', '#', '#', '#'},
+                    {'#', '_', '_', '_', 'P', '#'},
+                    {'#', '#', '#', '#', '#', '#'},
+                    {'_', '_', '_', '_', '_', '_'}
+            }
+    };
 
     public static int currentFloor = 2;
     public static int playerY = 1;
@@ -12,7 +32,7 @@ public class Main {
     public static int charge = 5;
     public static int energy = 50;
     public static int packets = 4;
-    public static char[][][] tower 
+
 
     public static void main(String[] args) {
         System.out.println("игра началась");
@@ -22,22 +42,18 @@ public class Main {
 
     public static void gameLoop() {
         while (!end) {
-
             if (energy <= 0) {
                 System.out.println("Индикатор энергии мигнул в последний раз. Наступила\n" +
                         "вечная тишина.");
                 return;
             }
 
-
             System.out.print("Статус | ");
             System.out.print("Этаж: " + floorNames[currentFloor]);
             System.out.print(" | Позиция игрока Y:" + playerY + " X:" + playerX);
-            System.out.print(" | Заряд кулака: " + charge);
             System.out.print(" | Энергия: " + energy);
-
+            System.out.print(" | Заряд:" + charge);
             System.out.println();
-
 
             System.out.println("карта");
             printMap();
@@ -45,36 +61,17 @@ public class Main {
             System.out.print("введите команду: ");
             String input = scanner.nextLine().trim().toLowerCase();
             if (input.isEmpty()) continue;
-
             char cmd = input.charAt(0);
-
-
-            if (cmd == 'w' || cmd == 's' || cmd == 'a' || cmd == 'd') {
+            if (cmd == 'w' || cmd == 's' ||  cmd == 'a' || cmd == 'd') {
                 movePlayer(cmd);
-
-
             } else if (cmd == 'e') {
-                System.out.println("введите направление: ");
-                String input2 = scanner.nextLine().trim().toLowerCase();
-                if (input2.isEmpty()) continue;
-
-                char dir = input2.charAt(0);
-                if (dir == 'w' || dir == 's' || dir == 'a' || dir == 'd') {
-                    interact(dir);
-                } else {
-                    System.out.println("неизвестное направление");
-                }
-
-
-
-
+                interactDown();
+            } else if (cmd == 'q') {
+                interactUp();
             } else if (cmd == 'c') {
                 singularity();
-
             } else if (cmd == 'p') {
                 phantomBurst();
-
-
             } else if (cmd == 'r') {
                 if (input.length() >= 2) {
                     char dir = input.charAt(1);
@@ -86,7 +83,6 @@ public class Main {
                 } else {
                     System.out.println("недостаточно аргументов для резонанса (пример: r w)");
                 }
-
             } else {
                 System.out.println("неверная команда");
             }
@@ -135,80 +131,101 @@ public class Main {
             System.out.println("искореженный металл, пройти нельзя");
             return;
         }
-
         playerY = ny;
         playerX = nx;
         energy--;
     }
 
-    public static void interact(char dir) {
-        int ny = playerY;
-        int nx = playerX;
-
-        switch (dir) {
-            case'w':ny--;break;
-            case's':ny++;break;
-            case'a':nx--;break;
-            case'd':nx++;break;
+    public static void interactDown() {
+        int nextFloor = currentFloor - 1;
+        if (nextFloor < 0) {
+            System.out.println("ниже этажа нет");
+            return;
         }
-
-        char cell;
         try {
-            cell = tower[currentFloor][ny][nx];
+            char cell = tower[nextFloor][playerY][playerX];
+            if (cell != '#') {
+                currentFloor = nextFloor;
+                energy -= 1;
+                System.out.println("вы опустились");
+            } else {
+                System.out.println("нельзя спуститься");
+            }
         } catch (ArrayIndexOutOfBoundsException e) {
-            System.out.println("в этом направлении нет лестницы");
-            return;
+            System.out.println("нельзя спуститься: размеры палуб не совпадают");
         }
-
-        if (cell == 'D'){
-            int nextFloor = currentFloor - 1;
-            boolean found = false;
-            for (int y = 0; y < tower[nextFloor].length && !found ;y++) {
-                for (int x = 0; x < tower[nextFloor][y].length;x++) {
-                    try {
-                        if (tower[nextFloor][y][x] == 'U') {
-                            playerX = x;
-                            playerY = y;
-                            currentFloor = nextFloor;
-                            energy--;
-                            found = true;
-                            System.out.println("вы опустились");
-                            break;
-                        }
-                    } catch (ArrayIndexOutOfBoundsException e) {
-                        System.out.println("ошибка поиска лестницы");
-                        return;
-                    }
-                }
-            }
-            return;
-        }
-        if (cell == 'U'){
-            int nextFloor = currentFloor + 1;
-            boolean found = false;
-            for (int y = 0; y < tower[nextFloor].length && !found ;y++) {
-                for (int x = 0; x < tower[nextFloor][y].length;x++) {
-                    try {
-                        if (tower[nextFloor][y][x] == 'D') {
-                            playerX = x;
-                            playerY = y;
-                            currentFloor = nextFloor;
-                            energy--;
-                            found = true;
-                            System.out.println("вы поднялись");
-                            break;
-                        }
-                    } catch (ArrayIndexOutOfBoundsException e) {
-                        System.out.println("ошибка поиска лестницы");
-                        return;
-                    }
-                }
-            }
-            return;
-        }
-        System.out.println("в этом направлении нет лестницы");
     }
 
+    public static void interactUp() {
+        int nextFloor = currentFloor + 1;
+        if (nextFloor >= tower.length) {
+            System.out.println("выше этажа нет");
+            return;
+        }
+        try {
+            char cell = tower[nextFloor][playerY][playerX];
+            if (cell != '#') {
+                currentFloor = nextFloor;
+                energy -= 1;
+                System.out.println("вы поднялись");
+            } else {
+                System.out.println("нельзя подняться");
+            }
+        } catch (ArrayIndexOutOfBoundsException e) {
+            System.out.println("нельзя подняться: размеры палуб не совпадают");
+        }
+    }
+
+    public static void bomber() {
+        if (energy < 5) {
+            System.out.println("Недостаточно энергии для взрыва (нужно 5).");
+            return;
+        }
+
+        System.out.println("БА-БАХ! Взрывная волна расходится во все 6 сторон...");
+        energy -= 5;
+
+        int[] dy = {-1, 1, 0, 0};
+        int[] dx = {0, 0, -1, 1};
+
+        char[][] currentDeck = tower[currentFloor];
+        int rows = currentDeck.length;
+        int cols = currentDeck[0].length;
+
+        for (int i = 0; i < 4; i++) {
+            int ny = playerY + dy[i];
+            int nx = playerX + dx[i];
+
+            if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
+                if (tower[currentFloor][ny][nx] == '#') {
+                    tower[currentFloor][ny][nx] = '_';
+                    System.out.println("Стена разрушена на текущей палубе.");
+                }
+            }
+        }
+
+        if (currentFloor + 1 < tower.length) {
+            char[][] upperDeck = tower[currentFloor + 1];
+            if (playerY >= 0 && playerY < upperDeck.length &&
+                    playerX >= 0 && playerX < upperDeck[0].length) {
+                if (upperDeck[playerY][playerX] == '#') {
+                    upperDeck[playerY][playerX] = '_';
+                    System.out.println("Стена разрушена на палубе выше!");
+                }
+            }
+        }
+
+        if (currentFloor - 1 >= 0) {
+            char[][] lowerDeck = tower[currentFloor - 1];
+            if (playerY >= 0 && playerY < lowerDeck.length &&
+                    playerX >= 0 && playerX < lowerDeck[0].length) {
+                if (lowerDeck[playerY][playerX] == '#') {
+                    lowerDeck[playerY][playerX] = '_';
+                    System.out.println("Стена разрушена на палубе ниже!");
+                }
+            }
+        }
+    }
 
     public static void singularity() {
         int cost = 12;
@@ -220,10 +237,8 @@ public class Main {
         System.out.println("Активация протокола «Сингулярность»... Пространство схлопывается.");
         energy -= cost;
 
-
         for (int z = currentFloor - 1; z <= currentFloor + 1; z++) {
             if (z < 0 || z >= tower.length) continue;
-
 
             for (int dy = -1; dy <= 1; dy++) {
                 for (int dx = -1; dx <= 1; dx++) {
@@ -327,7 +342,6 @@ public class Main {
         }
     }
 
-
     public static void printMap() {
         char[][] floor = tower[currentFloor];
         for (int y = 0; y < floor.length;y++) {
@@ -343,4 +357,3 @@ public class Main {
         System.out.println();
     }
 }
-```

@@ -1,17 +1,17 @@
-length && x >= 0 && x < map7[floor - 1][y].length) {
+lеngth && х >= 0 && х < map7[floor - 1][y].length) {
                 if (map7[floor - 1][y][x] == '#') {
                     map7[floor - 1][y][x] = '_';
-                    destroyed++;
+                    dеstroyed++;
                 }
             }
         }
         
         // ШАГ 5: списываем энергию и выводим результат
         if (destroyed > 0) {
-            energy -= 5;
+            еnergy -= 5;
             System.out.println("Бомба взорвалась! Разрушено стен: " + destroyed);
         } else {
-            System.out.println("Бомба не разрушила ни одной стены!");
+            System.оut.println("Бомба не разрушила ни одной стены!");
         }
     }
 

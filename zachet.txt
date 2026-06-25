@@ -1,0 +1,827 @@
+1. Интерфейсы (src/interfaces/Controllable.java)
+
+package interfaces;
+
+import java.io.Serializable;
+
+public interface Controllable extends Serializable {
+    void turnOn();
+    void turnOff();
+    boolean isOn();
+}
+
+2. Модели устройств (src/models/)Device.java (Абстрактный класс)
+
+package models;
+
+import interfaces.Controllable;
+
+public abstract class Device implements Controllable {
+    protected String id;
+    protected String name;
+    protected boolean status;
+    protected double powerConsumption;
+
+    public Device(String id, String name, boolean status, double powerConsumption) {
+        this.id = id;
+        this.name = name;
+        this.status = status;
+        this.powerConsumption = powerConsumption;
+    }
+
+    public abstract String getDetails();
+
+    // Геттеры и сеттеры
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public boolean isOn() { return status; }
+    public void setStatus(boolean status) { this.status = status; }
+    public double getPowerConsumption() { return powerConsumption; }
+    public void setPowerConsumption(double powerConsumption) { this.powerConsumption = powerConsumption; }
+
+    @Override
+    public void turnOn() { this.status = true; }
+
+    @Override
+    public void turnOff() { this.status = false; }
+}
+
+
+SmartLight.java
+
+package models;
+
+public class SmartLight extends Device {
+    private int brightness;
+    private String color;
+
+    public SmartLight(String id, String name, boolean status, double powerConsumption, int brightness, String color) {
+        super(id, name, status, powerConsumption);
+        this.brightness = brightness;
+        this.color = color;
+    }
+
+    @Override
+    public String getDetails() {
+        return String.format("Лампа [%s] '%s' - Статус: %s, Потребление: %.1f Вт, Яркость: %d%%, Цвет: %s",
+                id, name, status ? "Вкл" : "Выкл", powerConsumption, brightness, color);
+    }
+
+    public int getBrightness() { return brightness; }
+    public void setBrightness(int brightness) { this.brightness = brightness; }
+    public String getColor() { return color; }
+    public void setColor(String color) { this.color = color; }
+}
+
+SmartThermostat.java
+
+package models;
+
+public class SmartThermostat extends Device {
+    private double targetTemperature;
+
+    public SmartThermostat(String id, String name, boolean status, double powerConsumption, double targetTemperature) {
+        super(id, name, status, powerConsumption);
+        this.targetTemperature = targetTemperature;
+    }
+
+    @Override
+    public String getDetails() {
+        return String.format("Термостат [%s] '%s' - Статус: %s, Потребление: %.1f Вт, Целевая темп.: %.1f°C",
+                id, name, status ? "Вкл" : "Выкл", powerConsumption, targetTemperature);
+    }
+
+    public double getTargetTemperature() { return targetTemperature; }
+    public void setTargetTemperature(double targetTemperature) { this.targetTemperature = targetTemperature; }
+}
+
+SmartSocket.java
+
+package models;
+
+public class SmartSocket extends Device {
+    private double currentLoad;
+
+    public SmartSocket(String id, String name, boolean status, double powerConsumption, double currentLoad) {
+        super(id, name, status, powerConsumption);
+        this.currentLoad = currentLoad;
+    }
+
+    @Override
+    public String getDetails() {
+        return String.format("Розетка [%s] '%s' - Статус: %s, Потребление: %.1f Вт, Текущая нагрузка: %.1f Вт",
+                id, name, status ? "Вкл" : "Выкл", powerConsumption, currentLoad);
+    }
+
+    public double getCurrentLoad() { return currentLoad; }
+    public void setCurrentLoad(double currentLoad) { this.currentLoad = currentLoad; }
+}
+
+3. Логика и управление (src/logic/)Scenario.java (Универсальные сценарии)
+
+package logic;
+
+import models.Device;
+import java.io.Serializable;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
+
+public class Scenario<T extends Device> implements Serializable {
+    private final String name;
+    private final Predicate<T> condition;
+    private final Consumer<T> action;
+
+    public Scenario(String name, Predicate<T> condition, Consumer<T> action) {
+        this.name = name;
+        this.condition = condition;
+        this.action = action;
+    }
+
+    public String getName() { return name; }
+
+    @SuppressWarnings("unchecked")
+    public void apply(Device device) {
+        try {
+            // Проверка совместимости типов перед выполнением
+            T targetDevice = (T) device;
+            if (condition.test(targetDevice)) {
+                action.accept(targetDevice);
+                System.out.println("Сценарий '" + name + "' успешно применен к устройству: " + device.getName());
+            }
+        } catch (ClassCastException ignored) {
+            // Игнорируем устройства несовместимых типов
+        }
+    }
+}
+
+SmartHomeManager.java (Главный менеджер с Сериализацией)
+
+package logic;
+
+import models.Device;
+import java.io.*;
+import java.util.*;
+import java.util.stream.Stream;
+
+public class SmartHomeManager implements Serializable {
+    private static final long serialVersionUID = 1L;
+    
+    private Map<String, List<Device>> rooms = new HashMap<>();
+    private List<Scenario<? extends Device>> scenarios = new ArrayList<>();
+
+    public void addDevice(String room, Device device) {
+        rooms.computeIfAbsent(room, k -> new ArrayList<>()).add(device);
+    }
+
+    public void addScenario(Scenario<?> scenario) {
+        scenarios.add(scenario);
+    }
+
+    public Device getDeviceById(String id) {
+        return rooms.values().stream()
+                .flatMap(List::stream)
+                .filter(d -> d.getId().equals(id))
+                .findFirst()
+                .orElse(null);
+    }
+
+    public void executeAllScenarios() {
+        if (scenarios.isEmpty()) {
+            System.out.println("Нет добавленных сценариев.");
+            return;
+        }
+        rooms.values().stream()
+                .flatMap(List::stream)
+                .forEach(device -> {
+                    for (Scenario<? extends Device> scenario : scenarios) {
+                        scenario.apply(device);
+                    }
+                });
+    }
+
+    public Stream<Device> getAnalyticsStream() {
+        return rooms.values().stream().flatMap(Collection::stream);
+    }
+
+    public Map<String, List<Device>> getRooms() {
+        return rooms;
+    }
+
+    // Сохранение состояния в файл
+    public void saveToFile(String filename) {
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(filename))) {
+            oos.writeObject(this.rooms);
+            oos.writeObject(this.scenarios);
+            System.out.println("Состояние дома успешно сохранено.");
+        } catch (IOException e) {
+            System.out.println("Ошибка при сохранении: " + e.getMessage());
+        }
+    }
+
+    // Загрузка состояния из файла
+    @SuppressWarnings("unchecked")
+    public void loadFromFile(String filename) {
+        File file = new File(filename);
+        if (!file.exists()) {
+            System.out.println("Файл сохранения не найден. Создан пустой дом.");
+            return;
+        }
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(file))) {
+            this.rooms = (Map<String, List<Device>>) ois.readObject();
+            this.scenarios = (List<Scenario<? extends Device>>) ois.readObject();
+            System.out.println("Состояние дома успешно восстановлено из файла.");
+        } catch (IOException | ClassNotFoundException e) {
+            System.out.println("Ошибка при загрузке файла. Создан пустой дом. " + e.getMessage());
+        }
+    }
+}
+
+4. Главный класс приложения (src/main/Main.java)
+
+package main;
+
+import logic.Scenario;
+import logic.SmartHomeManager;
+import models.*;
+
+import java.util.Scanner;
+
+public class Main {
+    private static final String FILE_NAME = "home_state.dat";
+
+    public static void main(String[] args) {
+        SmartHomeManager manager = new SmartHomeManager();
+        manager.loadFromFile(FILE_NAME); // Бонусное задание: загрузка при старте
+
+        Scanner scanner = new Scanner(System.in);
+        boolean running = true;
+
+        while (running) {
+            System.out.println("\n=== МЕНЮ УПРАВЛЕНИЯ УМНЫМ ДОМОМ ===");
+            System.out.println("1. Добавить новое устройство в комнату");
+            System.out.println("2. Включить/выключить устройство");
+            System.out.println("3. Добавить базовый сценарий 'Сброс фантомного потребления'");
+            System.out.println("4. Добавить сценарий автоматизации (Вариант 1)");
+            System.out.println("5. Запустить проверку всех сценариев");
+            System.out.println("6. Выполнить аналитический запрос (Вариант 1)");
+            System.out.println("7. Выйти и сохранить состояние");
+            System.out.print("Выберите пункт: ");
+
+            int choice = scanner.nextInt();
+            scanner.nextLine(); // очистка буфера
+
+            switch (choice) {
+                case 1:
+                    System.out.print("Введите название комнаты: ");
+                    String room = scanner.nextLine();
+                    System.out.print("Тип устройства (1 - Лампа, 2 - Термостат, 3 - Розетка): ");
+                    int type = scanner.nextInt();
+                    scanner.nextLine();
+                    System.out.print("Введите ID устройства: ");
+                    String id = scanner.nextLine();
+                    System.out.print("Введите имя устройства: ");
+                    String name = scanner.nextLine();
+                    System.out.print("Текущее энергопотребление (Вт): ");
+                    double power = scanner.nextDouble();
+
+                    if (type == 1) {
+                        System.out.print("Яркость (0-100): ");
+                        int bright = scanner.nextInt();
+                        scanner.nextLine();
+                        System.out.print("Цвет: ");
+                        String color = scanner.nextLine();
+                        manager.addDevice(room, new SmartLight(id, name, false, power, bright, color));
+                    } else if (type == 2) {
+                        System.out.print("Целевая температура (°C): ");
+                        double temp = scanner.nextDouble();
+                        manager.addDevice(room, new SmartThermostat(id, name, false, power, temp));
+                    } else if (type == 3) {
+                        System.out.print("Текущая нагрузка на розетку (Вт): ");
+                        double load = scanner.nextDouble();
+                        manager.addDevice(room, new SmartSocket(id, name, false, power, load));
+                    }
+                    System.out.println("Устройство добавлено!");
+                    break;
+
+                case 2:
+                    System.out.print("Введите ID устройства: ");
+                    String searchId = scanner.nextLine();
+                    Device device = manager.getDeviceById(searchId);
+                    if (device != null) {
+                        if (device.isOn()) {
+                            device.turnOff();
+                            System.out.println(device.getName() + " выключено.");
+                        } else {
+                            device.turnOn();
+                            System.out.println(device.getName() + " включено.");
+                        }
+                    } else {
+                        System.out.println("Устройство не найдено.");
+                    }
+                    break;
+
+                case 3:
+                    // Общий базовый сценарий
+                    Scenario<Device> phantomReset = new Scenario<>(
+                            "Сброс фантомного потребления",
+                            d -> !d.isOn() && d.getPowerConsumption() > 0,
+                            d -> d.setPowerConsumption(0.0)
+                    );
+                    manager.addScenario(phantomReset);
+                    System.out.println("Базовый сценарий добавлен.");
+                    break;
+
+                case 4:
+                    // ИНДИВИДУАЛЬНЫЙ СЦЕНАРИЙ (Пример для Варианта 1)
+                    Scenario<SmartSocket> variant1Scenario = new Scenario<>(
+                            "Энергосбережение розеток (>2000Вт)",
+                            s -> s.isOn() && s.getCurrentLoad() > 2000,
+                            SmartSocket::turnOff
+                    );
+                    manager.addScenario(variant1Scenario);
+                    System.out.println("Сценарий Варианта 1 добавлен.");
+                    break;
+
+                case 5:
+                    System.out.println("Запуск сценариев...");
+                    manager.executeAllScenarios();
+                    break;
+
+                case 6:
+                    // ИНДИВИДУАЛЬНАЯ АНАЛИТИКА (Пример для Варианта 1)
+                    System.out.println("=== ТОП-3 самых энергозатратных устройств ===");
+                    manager.getAnalyticsStream()
+                            .sorted((d1, d2) -> Double.compare(d2.getPowerConsumption(), d1.getPowerConsumption()))
+                            .limit(3)
+                            .forEach(d -> System.out.println(d.getDetails()));
+                    break;
+
+                case 7:
+                    manager.saveToFile(FILE_NAME); // Бонусное задание: сохранение перед выходом
+                    running = false;
+                    break;
+
+                default:
+                    System.out.println("Неверный пункт.");
+            }
+        }
+        scanner.close();
+    }
+}
+
+Вариант 2
+manager.addScenario(new Scenario<SmartLight>(
+    "Спокойный сон",
+    l -> l.getBrightness() > 50,
+    l -> { l.setBrightness(10); l.setColor("Warm"); }
+));
+
+double totalPower = manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .mapToDouble(Device::getPowerConsumption)
+        .sum();
+System.out.println("Суммарное энергопотребление включенных устройств: " + totalPower + " Вт");
+
+Вариант 3
+manager.addScenario(new Scenario<SmartThermostat>(
+    "Эко-режим климата",
+    t -> t.isOn() && t.getTargetTemperature() > 25.0,
+    t -> t.setTargetTemperature(22.0)
+));
+
+java.util.List<String> roomNames = manager.getRooms().entrySet().stream()
+        .filter(entry -> entry.getValue().stream().anyMatch(d -> !d.isOn()))
+        .map(Map.Entry::getKey)
+        .collect(java.util.stream.Collectors.toList());
+System.out.println("Комнаты с выключенными устройствами: " + roomNames);
+
+Вариант 4
+manager.addScenario(new Scenario<Device>(
+    "Умное обесточивание",
+    d -> d.isOn() && d.getPowerConsumption() == 0,
+    Device::turnOff
+));
+
+Map<Boolean, java.util.List<Device>> grouped = manager.getAnalyticsStream()
+        .collect(java.util.stream.Collectors.groupingBy(Device::isOn));
+System.out.println("Включенные устройства: " + grouped.getOrDefault(true, java.util.Collections.emptyList()));
+System.out.println("Выключенные устройства: " + grouped.getOrDefault(false, java.util.Collections.emptyList()));
+
+Вариант 5
+manager.addScenario(new Scenario<SmartLight>(
+    "Имитация присутствия",
+    l -> !l.isOn(),
+    l -> { l.turnOn(); l.setBrightness(100); }
+));
+
+manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .min(java.util.Comparator.comparingDouble(Device::getPowerConsumption))
+        .ifPresentOrElse(
+            d -> System.out.println("Минимальное потребление среди включенных: " + d.getDetails()),
+            () -> System.out.println("Нет включенных устройств.")
+        );
+
+Вариант 7
+manager.addScenario(new Scenario<SmartLight>(
+    "Ночная подсветка",
+    l -> l.getName().contains("Коридор") && !l.isOn(),
+    l -> { l.turnOn(); l.setColor("Red"); l.setBrightness(5); }
+));
+
+boolean hasHighPower = manager.getAnalyticsStream()
+        .anyMatch(d -> d.getPowerConsumption() > 3000);
+System.out.println("Есть ли устройство мощнее 3000 Вт? " + (hasHighPower ? "Да" : "Нет"));
+
+Вариант 8
+manager.addScenario(new Scenario<SmartSocket>(
+    "Защита ТВ",
+    s -> s.getName().contains("TV") && s.getPowerConsumption() < 10,
+    SmartSocket::turnOff
+));
+
+String joinedNames = manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .map(Device::getName)
+        .collect(java.util.stream.Collectors.joining(", "));
+System.out.println("Включенные устройства: " + (joinedNames.isEmpty() ? "Нет" : joinedNames));
+
+Вариант 9
+manager.addScenario(new Scenario<SmartThermostat>(
+    "Эко-режим климата",
+    t -> t.isOn() && t.getTargetTemperature() > 25.0,
+    t -> t.setTargetTemperature(22.0)
+));
+
+Map<Boolean, java.util.List<Device>> grouped = manager.getAnalyticsStream()
+        .collect(java.util.stream.Collectors.groupingBy(Device::isOn));
+System.out.println("Включенные: " + grouped.getOrDefault(true, java.util.Collections.emptyList()));
+System.out.println("Выключенные: " + grouped.getOrDefault(false, java.util.Collections.emptyList()));
+
+Вариант 10
+manager.addScenario(new Scenario<SmartLight>(
+    "Спокойный сон",
+    l -> l.getBrightness() > 50,
+    l -> { l.setBrightness(10); l.setColor("Warm"); }
+));
+
+manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .min(java.util.Comparator.comparingDouble(Device::getPowerConsumption))
+        .ifPresentOrElse(
+            d -> System.out.println("Устройство с мин. потреблением: " + d.getDetails()),
+            () -> System.out.println("Нет включенных устройств.")
+        );
+
+Вариант 11
+manager.addScenario(new Scenario<SmartSocket>(
+    "Энергосбережение розеток",
+    s -> s.isOn() && s.getCurrentLoad() > 2000,
+    SmartSocket::turnOff
+));
+
+Map<String, Long> countByClass = manager.getAnalyticsStream()
+        .collect(java.util.stream.Collectors.groupingBy(d -> d.getClass().getSimpleName(), java.util.stream.Collectors.counting()));
+System.out.println("Устройств в системе: " + countByClass);
+
+Вариант 12
+manager.addScenario(new Scenario<SmartLight>(
+    "Имитация присутствия",
+    l -> !l.isOn(),
+    l -> { l.turnOn(); l.setBrightness(100); }
+));
+
+System.out.println("=== ТОП-3 энергозатратных устройств ===");
+manager.getAnalyticsStream()
+        .sorted((d1, d2) -> Double.compare(d2.getPowerConsumption(), d1.getPowerConsumption()))
+        .limit(3)
+        .forEach(d -> System.out.println(d.getDetails()));
+
+Вариант 13
+manager.addScenario(new Scenario<SmartThermostat>(
+    "Безопасный обогрев",
+    t -> t.getTargetTemperature() < 15.0,
+    t -> { t.turnOn(); t.setTargetTemperature(20.0); }
+));
+
+String names = manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .map(Device::getName)
+        .collect(java.util.stream.Collectors.joining(", "));
+System.out.println("Имена включенных устройств: " + names);
+
+Вариант 14
+manager.addScenario(new Scenario<SmartLight>(
+    "Ночная подсветка",
+    l -> l.getName().contains("Коридор") && !l.isOn(),
+    l -> { l.turnOn(); l.setColor("Red"); l.setBrightness(5); }
+));
+
+java.util.List<String> offRooms = manager.getRooms().entrySet().stream()
+        .filter(e -> e.getValue().stream().anyMatch(d -> !d.isOn()))
+        .map(Map.Entry::getKey)
+        .collect(java.util.stream.Collectors.toList());
+System.out.println("Комнаты, где есть выключенные приборы: " + offRooms);
+
+Вариант 15
+manager.addScenario(new Scenario<Device>(
+    "Умное обесточивание",
+    d -> d.isOn() && d.getPowerConsumption() == 0,
+    Device::turnOff
+));
+
+boolean isOver3000 = manager.getAnalyticsStream()
+        .anyMatch(d -> d.getPowerConsumption() > 3000);
+System.out.println("Превышает ли кто-то лимит в 3000 Вт? " + isOver3000);
+
+
+Вариант 16
+manager.addScenario(new Scenario<SmartSocket>(
+    "Защита ТВ",
+    s -> s.getName().contains("TV") && s.getPowerConsumption() < 10,
+    SmartSocket::turnOff
+));
+
+Map<Boolean, java.util.List<Device>> groups = manager.getAnalyticsStream()
+        .collect(java.util.stream.Collectors.groupingBy(Device::isOn));
+System.out.println("Группировка (Вкл/Выкл): " + groups);
+
+
+Вариант 17
+manager.addScenario(new Scenario<Device>(
+    "Умное обесточивание",
+    d -> d.isOn() && d.getPowerConsumption() == 0,
+    Device::turnOff
+));
+
+manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .min(java.util.Comparator.comparingDouble(Device::getPowerConsumption))
+        .ifPresentOrElse(
+            d -> System.out.println("Самое экономичное устройство: " + d.getDetails()),
+            () -> System.out.println("Включенных приборов нет.")
+        );
+
+
+Вариант 18
+manager.addScenario(new Scenario<SmartLight>(
+    "Имитация присутствия",
+    l -> !l.isOn(),
+    l -> { l.turnOn(); l.setBrightness(100); }
+));
+
+Map<String, Long> classesCount = manager.getAnalyticsStream()
+        .collect(java.util.stream.Collectors.groupingBy(d -> d.getClass().getSimpleName(), java.util.stream.Collectors.counting()));
+System.out.println("Статистика классов устройств: " + classesCount);
+
+
+Вариант 19
+manager.addScenario(new Scenario<SmartThermostat>(
+    "Безопасный обогрев",
+    t -> t.getTargetTemperature() < 15.0,
+    t -> { t.turnOn(); t.setTargetTemperature(20.0); }
+));
+
+System.out.println("=== ТОП-3 энергозатратных устройств ===");
+manager.getAnalyticsStream()
+        .sorted((d1, d2) -> Double.compare(d2.getPowerConsumption(), d1.getPowerConsumption()))
+        .limit(3)
+        .forEach(d -> System.out.println(d.getDetails()));
+
+
+Вариант 20
+manager.addScenario(new Scenario<SmartLight>(
+    "Ночная подсветка",
+    l -> l.getName().contains("Коридор") && !l.isOn(),
+    l -> { l.turnOn(); l.setColor("Red"); l.setBrightness(5); }
+));
+
+double total = manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .mapToDouble(Device::getPowerConsumption)
+        .sum();
+System.out.println("Общая текущая нагрузка сети: " + total + " Вт");
+
+
+Вариант 21
+manager.addScenario(new Scenario<SmartSocket>(
+    "Энергосбережение розеток",
+    s -> s.isOn() && s.getCurrentLoad() > 2000,
+    SmartSocket::turnOff
+));
+
+
+String workingDevices = manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .map(Device::getName)
+        .collect(java.util.stream.Collectors.joining(", "));
+System.out.println("Работающие приборы: " + workingDevices);
+
+
+Вариант 22
+manager.addScenario(new Scenario<SmartLight>(
+    "Спокойный сон",
+    l -> l.getBrightness() > 50,
+    l -> { l.setBrightness(10); l.setColor("Warm"); }
+));
+
+boolean criticalLoad = manager.getAnalyticsStream()
+        .anyMatch(d -> d.getPowerConsumption() > 3000);
+System.out.println("Есть ли критическое потребление (>3кВт)? " + criticalLoad);
+
+
+Вариант 23
+manager.addScenario(new Scenario<SmartThermostat>(
+    "Эко-режим климата",
+    t -> t.isOn() && t.getTargetTemperature() > 25.0,
+    t -> t.setTargetTemperature(22.0)
+));
+
+Map<Boolean, java.util.List<Device>> mapByStatus = manager.getAnalyticsStream()
+        .collect(java.util.stream.Collectors.groupingBy(Device::isOn));
+System.out.println("Устройства рассортированы по питанию: " + mapByStatus);
+
+
+Вариант 24
+manager.addScenario(new Scenario<SmartSocket>(
+    "Защита ТВ",
+    s -> s.getName().contains("TV") && s.getPowerConsumption() < 10,
+    SmartSocket::turnOff
+));
+
+java.util.List<String> targetRooms = manager.getRooms().entrySet().stream()
+        .filter(entry -> entry.getValue().stream().anyMatch(d -> !d.isOn()))
+        .map(Map.Entry::getKey)
+        .collect(java.util.stream.Collectors.toList());
+System.out.println("Список комнат с отключенными приборами: " + targetRooms);
+
+
+Вариант 25
+manager.addScenario(new Scenario<SmartThermostat>(
+    "Безопасный обогрев",
+    t -> t.getTargetTemperature() < 15.0,
+    t -> { t.turnOn(); t.setTargetTemperature(20.0); }
+));
+
+Map<Boolean, java.util.List<Device>> groups = manager.getAnalyticsStream()
+        .collect(java.util.stream.Collectors.groupingBy(Device::isOn));
+System.out.println("Разделение по активности: " + groups);
+
+
+Вариант 26
+manager.addScenario(new Scenario<SmartLight>(
+    "Ночная подсветка",
+    l -> l.getName().contains("Коридор") && !l.isOn(),
+    l -> { l.turnOn(); l.setColor("Red"); l.setBrightness(5); }
+));
+
+manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .min(java.util.Comparator.comparingDouble(Device::getPowerConsumption))
+        .ifPresentOrElse(
+            d -> System.out.println("Эко-лидер среди включенных: " + d.getDetails()),
+            () -> System.out.println("Все приборы обесточены.")
+        );
+
+
+Вариант 27
+manager.addScenario(new Scenario<Device>(
+    "Умное обесточивание",
+    d -> d.isOn() && d.getPowerConsumption() == 0,
+    Device::turnOff
+));
+
+Map<String, Long> finalCount = manager.getAnalyticsStream()
+        .collect(java.util.stream.Collectors.groupingBy(d -> d.getClass().getSimpleName(), java.util.stream.Collectors.counting()));
+System.out.println("Метрика типов оборудования: " + finalCount);
+
+
+Вариант 28
+manager.addScenario(new Scenario<SmartLight>(
+    "Имитация присутствия",
+    l -> !l.isOn(),
+    l -> { l.turnOn(); l.setBrightness(100); }
+));
+
+boolean checkPower = manager.getAnalyticsStream()
+        .anyMatch(d -> d.getPowerConsumption() > 3000);
+System.out.println("Обнаружены ли сверхмощные потребители? " + checkPower);
+
+
+Вариант 29
+manager.addScenario(new Scenario<SmartSocket>(
+    "Защита ТВ",
+    s -> s.getName().contains("TV") && s.getPowerConsumption() < 10,
+    SmartSocket::turnOff
+));
+
+String activeList = manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .map(Device::getName)
+        .collect(java.util.stream.Collectors.joining(", "));
+System.out.println("Перечень запущенного оборудования: " + activeList);
+
+
+Вариант 30
+manager.addScenario(new Scenario<SmartLight>(
+    "Спокойный сон",
+    l -> l.getBrightness() > 50,
+    l -> { l.setBrightness(10); l.setColor("Warm"); }
+));
+
+System.out.println("=== ТОП-3 энергозатратных устройств ===");
+manager.getAnalyticsStream()
+        .sorted((d1, d2) -> Double.compare(d2.getPowerConsumption(), d1.getPowerConsumption()))
+        .limit(3)
+        .forEach(d -> System.out.println(d.getDetails()));
+
+
+Вариант 31
+manager.addScenario(new Scenario<SmartSocket>(
+    "Энергосбережение розеток",
+    s -> s.isOn() && s.getCurrentLoad() > 2000,
+    SmartSocket::turnOff
+));
+
+double wattsSum = manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .mapToDouble(Device::getPowerConsumption)
+        .sum();
+System.out.println("Суммарная нагрузка: " + wattsSum + " Вт");
+
+
+Вариант 32
+manager.addScenario(new Scenario<SmartThermostat>(
+    "Эко-режим климата",
+    t -> t.isOn() && t.getTargetTemperature() > 25.0,
+    t -> t.setTargetTemperature(22.0)
+));
+
+java.util.List<String> roomsWithOff = manager.getRooms().entrySet().stream()
+        .filter(entry -> entry.getValue().stream().anyMatch(d -> !d.isOn()))
+        .map(Map.Entry::getKey)
+        .collect(java.util.stream.Collectors.toList());
+System.out.println("Комнаты с неактивными приборами: " + roomsWithOff);
+
+
+Вариант 33
+manager.addScenario(new Scenario<SmartSocket>(
+    "Защита ТВ",
+    s -> s.getName().contains("TV") && s.getPowerConsumption() < 10,
+    SmartSocket::turnOff
+));
+
+boolean peakCheck = manager.getAnalyticsStream()
+        .anyMatch(d -> d.getPowerConsumption() > 3000);
+System.out.println("Есть ли превышение порога в 3000 Вт? " + peakCheck);
+
+
+Вариант 34
+manager.addScenario(new Scenario<SmartLight>(
+    "Ночная подсветка",
+    l -> l.getName().contains("Коридор") && !l.isOn(),
+    l -> { l.turnOn(); l.setColor("Red"); l.setBrightness(5); }
+));
+
+String textList = manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .map(Device::getName)
+        .collect(java.util.stream.Collectors.joining(", "));
+System.out.println("Список запущенных модулей: " + textList);
+
+
+Вариант 35
+manager.addScenario(new Scenario<SmartLight>(
+    "Имитация присутствия",
+    l -> !l.isOn(),
+    l -> { l.turnOn(); l.setBrightness(100); }
+));
+
+System.out.println("=== ТОП-3 энергозатратных устройств ===");
+manager.getAnalyticsStream()
+        .sorted((d1, d2) -> Double.compare(d2.getPowerConsumption(), d1.getPowerConsumption()))
+        .limit(3)
+        .forEach(d -> System.out.println(d.getDetails()));
+
+
+Вариант 36
+manager.addScenario(new Scenario<SmartLight>(
+    "Спокойный сон",
+    l -> l.getBrightness() > 50,
+    l -> { l.setBrightness(10); l.setColor("Warm"); }
+));
+
+double totalConsumption = manager.getAnalyticsStream()
+        .filter(Device::isOn)
+        .mapToDouble(Device::getPowerConsumption)
+        .sum();
+System.out.println("Суммарное энергопотребление всех включенных устройств: " + totalConsumption + " Вт");
+
+
+
+
+
+
+

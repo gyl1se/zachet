@@ -1,447 +1,460 @@
-------------Controllable----------------------
 package interfaces;
 
-public interface Controllable {
-    void turnOn();
-    void turnOff();
-    boolean isOn();
+public interface Dispatchable {
+    void dispatch();
+    void recall();
+    boolean isInTransit();
 }
 
-----------Scenario----------------------------
-package logic;
-
-import models.Device;
-
-import java.util.function.Consumer;
-import java.util.function.Predicate;
-
-public class Scenario<T extends Device> {
-    private String name;
-    private Predicate<T> condition;
-    private Consumer<T> action;
-
-    public Scenario(String name, Predicate<T> condition, Consumer<T> action) {
-        this.name = name;
-        this.condition = condition;
-        this.action = action;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void apply(T device) {
-        if (condition.test(device)) {
-            action.accept(device);
-        }
-    }
-
-    @Override
-    public String toString() {
-        return "Scenario{name='" + name + "'}";
-    }
-}
-
-
--------------------Device--------------------------------
 package models;
 
-import interfaces.Controllable;
+import interfaces.Dispatchable;
 
-public abstract class Device implements Controllable {
+public abstract class Transport implements Dispatchable {
     protected String id;
-    protected String name;
+    protected String model;
     protected boolean status;
-    protected double powerConsumption;
-
-    public Device(String id, String name, boolean status, double powerConsumption) {
-        this.id = id;
-        this.name = name;
-        this.status = status;
-        this.powerConsumption = powerConsumption;
-    }
+    protected double batteryLevel;
 
     @Override
-    public void turnOn() {
+    public void dispatch(){
         status = true;
     }
 
     @Override
-    public void turnOff() {
+    public void recall(){
         status = false;
     }
 
     @Override
-    public boolean isOn() {
+    public boolean isInTransit(){
         return status;
     }
 
-    public String getId() {
-        return id;
+    public Transport(String id,String model,boolean status,double batteryLevel){
+        this.id = id;
+        this.model = model;
+        this.status = status;
+        this.batteryLevel = batteryLevel;
+
     }
 
-    public void setId(String id) {
+    public String getId(){
+        return id;
+    }
+    public void setId(String id){
         this.id = id;
     }
 
-    public String getName() {
-        return name;
+    public String getModel(){
+        return model;
+    }
+    public void setModel(String model){
+        this.model = model;
     }
 
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public boolean getStatus() {
+    public boolean getStatus(){
         return status;
     }
-
-    public void setStatus(boolean status) {
+    public void setStatus(boolean status){
         this.status = status;
     }
 
-    public double getPowerConsumption() {
-        return powerConsumption;
+    public double getBatteryLevel(){
+        return batteryLevel;
     }
-
-    public void setPowerConsumption(double powerConsumption) {
-        this.powerConsumption = powerConsumption;
+    public void setBatteryLevel(double batteryLevel){
+        this.batteryLevel = batteryLevel;
     }
 
     public abstract String getDetails();
 
     @Override
-    public String toString() {
+    public String toString(){
         return getDetails();
     }
 }
 
----------------------SmartHomeManager-----------------------------
+package models;
+
+import interfaces.Dispatchable;
+
+public class DeliveryDrone extends Transport{
+    private double maxPayload;
+
+    public DeliveryDrone(String id,String model,boolean status,double batteryLevel,double maxPayload){
+        super(id, model, status, batteryLevel);
+        this.maxPayload = maxPayload;
+    }
+
+    public double getMaxPayload(){
+        return maxPayload;
+    }
+    public void setMaxPayload(double maxPayload){
+        this.maxPayload = maxPayload;
+    }
+
+    @Override
+    public String getDetails(){
+        return "id: "+id+" model: "+model+" status: "+status+" batteryLevel:"+ batteryLevel+ " maxPayLoad: "+ maxPayload;
+    }
+}
+
+package models;
+
+public class CargoHelicopter extends Transport{
+    private double flightRange;
+
+    public CargoHelicopter(String id,String model,boolean status,double batteryLevel,double flightRange){
+        super(id, model, status, batteryLevel);
+        this.flightRange = flightRange;
+    }
+
+    public double getFlightRange(){
+        return flightRange;
+    }
+
+    public void setFlightRange(double flightRange){
+        this.flightRange = flightRange;
+    }
+    @Override
+    public String getDetails(){
+        return "id: "+id+" model: "+model+" status: "+status+" batteryLevel:"+ batteryLevel+ " flightRange: " + flightRange;
+    }
+}
+
+package models;
+
+public class GroundRobot extends Transport{
+    private int wheelCondition;
+
+    public GroundRobot(String id,String model,boolean status,double batteryLevel,int wheelCondition ){
+        super(id, model, status, batteryLevel);
+        this.wheelCondition = wheelCondition;
+    }
+
+    public int getWheelCondition(){
+        return wheelCondition;
+    }
+    public void setWheelCondition(int wheelCondition){
+        this.wheelCondition = wheelCondition;
+    }
+
+
+    @Override
+    public String getDetails(){
+        return "id: "+id+" model: "+model+" status: "+status+" batteryLevel:"+ batteryLevel+ " wheelCondition" + wheelCondition;
+    }
+}
+
 package logic;
 
-import logic.Scenario;
-import models.Device;
+import interfaces.Dispatchable;
+import models.Transport;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+public class DispatchRule<T extends Transport> {
+    private String ruleName;
+    private Predicate<T> condition;
+    private Consumer<T> action;
+
+    public DispatchRule(String ruleName,Predicate<T> condition,Consumer<T> action){
+        this.ruleName = ruleName;
+        this.condition = condition;
+        this.action = action;
+    }
+
+    public String getRuleName(){
+        return ruleName;
+    }
+
+    public void apply(T transport){
+        if (condition.test(transport)){
+            action.accept(transport);
+        }
+
+    }
+}
+
+package logic;
+
+import models.Transport;
+
 import java.util.Map;
+import java.util.List;
+import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.stream.Stream;
 
-public class SmartHomeManager {
-    private Map<String, List<Device>> rooms;
-    private List<Scenario<Device>> scenarios;
+public class LogisticsManager {
+    private Map<String, List<Transport>> hubs;
+    private List<DispatchRule<Transport>> rules;
 
-    public SmartHomeManager() {
-        this.rooms = new HashMap<>();
-        this.scenarios = new ArrayList<>();
-    }
-    public Map<String, List<Device>> getRooms() {
-        return rooms;
+    public LogisticsManager() {
+        this.hubs = new HashMap<>();
+        this.rules = new ArrayList<>();
     }
 
-    public void addDevice(String room, Device device) {
-        rooms.computeIfAbsent(room, k -> new ArrayList<>()).add(device);
+    public void addTransport(String hubName,Transport transport){
+        hubs.computeIfAbsent(hubName,k -> new ArrayList<>()).add(transport);
     }
 
-    public void addScenario(Scenario<Device> scenario) {
-        scenarios.add(scenario);
+    public void addRule(DispatchRule<Transport> rule){
+        rules.add(rule);
     }
 
-    public Device getDeviceById(String id) {
-        return rooms.values().stream()
-                .flatMap(List::stream)
-                .filter(d -> d.getId().equalsIgnoreCase(id))
-                .findFirst()
-                .orElse(null);
+    public Transport getTransportById(String id){
+        return hubs.values().stream().flatMap(List::stream).
+                filter(transport -> transport.getId().equalsIgnoreCase(id)).findFirst().orElse(null);
     }
 
-    public void executeAllScenarios() {
-        for (Scenario<Device> scenario : scenarios) {
-            rooms.values().stream()
-                    .flatMap(List::stream)
-                    .forEach(scenario::apply);
+    public void applyAllRules(){
+        for (DispatchRule<Transport> rule : rules){
+            hubs.values().stream().flatMap(List::stream).forEach(rule::apply);
         }
     }
 
-    public Stream<Device> getAnalyticsStream() {
-        return rooms.values().stream().flatMap(List::stream);
+    public Stream<Transport> getAnalysticsStream(){
+        return hubs.values().stream().flatMap(List::stream);
     }
 
-    public void printAllDevices() {
-        if (rooms.isEmpty()) {
-            System.out.println("Устройств нет.");
+
+    public void printAllTransports(){
+        if (hubs.isEmpty()){
+            System.out.println("Транспортов нет");
             return;
         }
 
-        rooms.forEach((room, devices) -> {
-            System.out.println("Комната: " + room);
-            devices.forEach(d -> System.out.println("  " + d.getDetails()));
-        });
+        hubs.forEach(((hub, transports) -> {
+            transports.forEach(transport -> System.out.println(" "+transport));
+        }));
     }
+
+
+
+
+
+
+
+
+
+
+    //public void addTransport(String hubName,Transport transport){
+    //    hubs.computeIfAbsent(hubName,k -> new ArrayList<>()).add(transport);
+    //}
+//
+    //public void addRule(DispatchRule<Transport> rule){
+    //    rules.add(rule);
+    //}
+//
+    //public void applyAllRules() {
+    //    for (DispatchRule<Transport> rule : rules) {
+    //        hubs.values().stream().flatMap(List::stream).forEach(rule::apply);
+    //    }
+    //}
+//
+    //public void printAllTransports(){
+    //    if (hubs.isEmpty()){
+    //        System.out.println("Транспортов нет");
+    //        return;
+    //    }
+    //    hubs.forEach((hub,transports) -> {
+    //        transports.forEach(transport -> System.out.println(" "+transport.getDetails()));
+    //    });
+//
+    //}
+//
+    //public Transport getTransportById(String id){
+    //    return hubs.values().stream().flatMap(List::stream).
+    //            filter(transport -> transport.getId().equalsIgnoreCase(id)).findFirst().orElse(null);
+    //}
+//
+
+
 }
 
-
-------------------------SmartSocket------------------------------
-package models;
-
-public class SmartSocket extends Device {
-    private double currentLoad;
-
-    public SmartSocket(String id, String name, boolean status, double powerConsumption, double currentLoad) {
-        super(id, name, status, powerConsumption);
-        this.currentLoad = currentLoad;
-    }
-
-    public double getCurrentLoad() {
-        return currentLoad;
-    }
-
-    public void setCurrentLoad(double currentLoad) {
-        this.currentLoad = currentLoad;
-    }
-
-    @Override
-    public String getDetails() {
-        return "SmartSocket{id='" + id + "', name='" + name + "', status=" + status +
-                ", powerConsumption=" + powerConsumption +
-                ", currentLoad=" + currentLoad + "}";
-    }
-}
-
------------------------Smart Thermostat--------------------------
-package models;
-
-public class SmartThermostat extends Device {
-    private double targetTemperature;
-
-    public SmartThermostat(String id, String name, boolean status, double powerConsumption, double targetTemperature) {
-        super(id, name, status, powerConsumption);
-        this.targetTemperature = targetTemperature;
-    }
-
-    public double getTargetTemperature() {
-        return targetTemperature;
-    }
-
-    public void setTargetTemperature(double targetTemperature) {
-        this.targetTemperature = targetTemperature;
-    }
-
-    @Override
-    public String getDetails() {
-        return "SmartThermostat{id='" + id + "', name='" + name + "', status=" + status +
-                ", powerConsumption=" + powerConsumption +
-                ", targetTemperature=" + targetTemperature + "}";
-    }
-}
-
--------------------SmartLight--------------------------------
-package models;
-
-public class SmartLight extends Device {
-    private int brightness;
-    private String color;
-
-    public SmartLight(String id, String name, boolean status, double powerConsumption, int brightness, String color) {
-        super(id, name, status, powerConsumption);
-        this.brightness = brightness;
-        this.color = color;
-    }
-
-    public int getBrightness() {
-        return brightness;
-    }
-
-    public void setBrightness(int brightness) {
-        if (brightness < 0) brightness = 0;
-        if (brightness > 100) brightness = 100;
-        this.brightness = brightness;
-    }
-
-    public String getColor() {
-        return color;
-    }
-
-    public void setColor(String color) {
-        this.color = color;
-    }
-
-    @Override
-    public String getDetails() {
-        return "SmartLight{id='" + id + "', name='" + name + "', status=" + status +
-                ", powerConsumption=" + powerConsumption +
-                ", brightness=" + brightness + ", color='" + color + "'}";
-    }
-}
-
-------------------------Main--------------------------
 package main;
-import logic.Scenario;
-import logic.SmartHomeManager;
-import models.Device;
-import models.SmartLight;
-import models.SmartSocket;
-import models.SmartThermostat;
 
+import logic.DispatchRule;
+import logic.LogisticsManager;
+import models.CargoHelicopter;
+import models.DeliveryDrone;
+import models.GroundRobot;
+import models.Transport;
+
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 import java.util.stream.Collectors;
 
 public class Main {
-    public static void main(String[] args) {
+    public static void main(String[] args){
         Scanner scanner = new Scanner(System.in);
-        SmartHomeManager manager = new SmartHomeManager();
+        LogisticsManager manager = new LogisticsManager();
 
-        while (true) {
-            System.out.println("\n=== УМНЫЙ ДОМ ===");
-            System.out.println("1. Добавить новое устройство");
-            System.out.println("2. Включить/выключить устройство");
-            System.out.println("3. Добавить сценарий 'Энергосбережение'");
-            System.out.println("4. Добавить сценарий автоматизации");
-            System.out.println("5. Запустить проверку всех сценариев");
+        while (true){
+            System.out.println("МЕНЮ:");
+            System.out.println("1. Добавить новый транспорт в хаб");
+            System.out.println("2. Отправить/вернуть транспорт");
+            System.out.println("3. Добавить базовое правило «Калибровка батареи»");
+            System.out.println("4. Добавить правило диспетчеризации в систему");
+            System.out.println("5. Запустить проверку всех правил");
             System.out.println("6. Выполнить аналитический запрос");
-            System.out.println("7. Показать все устройства");
-            System.out.println("0. Выход");
-            System.out.print("Выберите пункт: ");
+            System.out.println("7. Вывести все транспорты ");
+            System.out.println("0. Выход из программы");
 
-            int choice = readInt(scanner);
+            System.out.println("Введите число: ");
 
-            switch (choice) {
-                case 1 -> addDevice(scanner, manager);
-                case 2 -> toggleDevice(scanner, manager);
-                case 3 -> addEnergySavingScenario(manager);
-                case 4 -> System.out.println("Для варианта 2 отдельный сценарий не требуется.");
+            int choice = Integer.parseInt(scanner.nextLine());
+
+            switch (choice){
+                case 1 -> addTransport(scanner,manager);
+                case 2 -> toogleTransport(scanner,manager);
+                case 3 -> Batery(manager);
+                case 4 -> Special(manager);
                 case 5 -> {
-                    manager.executeAllScenarios();
-                    System.out.println("Все сценарии выполнены.");
+                    manager.applyAllRules();
+                System.out.println("Все правила выполнены");
                 }
-                case 6 -> analytics(manager);
-                case 7 -> manager.printAllDevices();
-                case 0 -> {
-                    System.out.println("Выход.");
-                    return;
-                }
-                default -> System.out.println("Неверный пункт меню.");
+                case 7 -> manager.printAllTransports();
+
             }
         }
+
+
     }
 
-    private static void addEnergySavingScenario(SmartHomeManager manager) {
-        Scenario<Device> scenario = new Scenario<>(
-                "Энергосбережение",
-                d -> d instanceof SmartSocket socket && socket.isOn() && socket.getCurrentLoad() > 2000,
-                d -> {
-                    SmartSocket socket = (SmartSocket) d;
-                    socket.turnOff();
-                }
-        );
-        manager.addScenario(scenario);
-        System.out.println("Сценарий 'Энергосбережение' добавлен.");
-    }
+    public static void toogleTransport(Scanner scanner, LogisticsManager manager){
 
-    private static void analytics(SmartHomeManager manager) {
-        double total = manager.getAnalyticsStream()
-                .filter(Device::isOn)
-                .mapToDouble(Device::getPowerConsumption)
-                .sum();
+        System.out.println("Введите ID: " );
 
-        System.out.println("Суммарное энергопотребление включённых устройств: " + total);
-    }
-
-    private static void addDevice(Scanner scanner, SmartHomeManager manager) {
-        System.out.print("Комната: ");
-        String room = scanner.nextLine();
-
-        System.out.print("ID: ");
         String id = scanner.nextLine();
 
-        System.out.print("Имя: ");
-        String name = scanner.nextLine();
+        Transport transport = manager.getTransportById(id);
 
-        System.out.println("Тип устройства:");
-        System.out.println("1. SmartLight");
-        System.out.println("2. SmartThermostat");
-        System.out.println("3. SmartSocket");
-        System.out.print("Ваш выбор: ");
-        int type = readInt(scanner);
+        if (transport != null){
+            System.out.println("1.Отравить");
+            System.out.println("2.Вернуть");
 
-        System.out.print("Включено? (true/false): ");
+            int choice = Integer.parseInt(scanner.nextLine());
+            switch (choice){
+                case 1 -> transport.dispatch();
+                case 2 -> transport.recall();
+            }
+        }
+
+
+
+        System.out.println("1.Отравить");
+        System.out.println("2.Вернуть");
+
+
+    }
+
+    public static void Special(LogisticsManager manager){
+        DispatchRule<Transport> rule = new DispatchRule<>("Экстренный вызов",
+                transport -> transport instanceof DeliveryDrone drone && drone.isInTransit() && drone.getBatteryLevel() < 15,
+                transport -> {
+            DeliveryDrone drone = (DeliveryDrone) transport;
+            drone.recall();
+                });
+        manager.addRule(rule);
+    }
+
+
+
+
+    public static void Batery(LogisticsManager manager){
+        DispatchRule<Transport> rule = new DispatchRule<>(" Калибровка батареи",
+                transport -> transport.getBatteryLevel() < 0,
+                transport -> transport.setBatteryLevel(0)
+                );
+        manager.addRule(rule);
+        System.out.println("Правило добавлено");
+    }
+
+
+    public static void addTransport(Scanner scanner, LogisticsManager manager){
+        System.out.println("Название хаба: ");
+        String hubName = scanner.nextLine();
+        System.out.println("Модель: ");
+        String model = scanner.nextLine();
+        System.out.println("ID: ");
+        String id = scanner.nextLine();
+
+        System.out.println("Тип транспорта: ");
+        System.out.println("1. DeliveryDrone: ");
+        System.out.println("2. CargoHelicopter: ");
+        System.out.println("3. GroundRobot: ");
+        System.out.println("Введите цифру: ");
+
+        int type = Integer.parseInt(scanner.nextLine());
+
+        System.out.println("Находится в пути: true/false");
+
         boolean status = Boolean.parseBoolean(scanner.nextLine());
 
-        System.out.print("Потребление (W): ");
-        double power = readDouble(scanner);
+        System.out.println("Уровень заряда: ");
 
-        Device device = null;
+        double level = Double.parseDouble(scanner.nextLine());
 
-        switch (type) {
+        Transport transport = null;
+
+        switch (type){
             case 1 -> {
-                System.out.print("Яркость (0-100): ");
-                int brightness = readInt(scanner);
-                System.out.print("Цвет: ");
-                String color = scanner.nextLine();
-                device = new SmartLight(id, name, status, power, brightness, color);
+                System.out.println("MaxPayLoad: ");
+                double maxP = Double.parseDouble(scanner.nextLine());
+                transport = new DeliveryDrone(id,model,status,level,maxP);
             }
             case 2 -> {
-                System.out.print("Целевая температура: ");
-                double temp = readDouble(scanner);
-                device = new SmartThermostat(id, name, status, power, temp);
+                System.out.println("flightRange: ");
+                double flight = Double.parseDouble(scanner.nextLine());
+                transport = new CargoHelicopter(id,model,status,level,flight);
+
             }
             case 3 -> {
-                System.out.print("Текущая нагрузка (W): ");
-                double load = readDouble(scanner);
-                device = new SmartSocket(id, name, status, power, load);
+                System.out.println("wheelCondition: ");
+                int wheel = Integer.parseInt(scanner.nextLine());
+                transport = new GroundRobot(id,model,status,level,wheel);
+
             }
-            default -> System.out.println("Неверный тип.");
+
         }
 
-        if (device != null) {
-            manager.addDevice(room, device);
-            System.out.println("Устройство добавлено.");
+        if (manager != null){
+            System.out.println("Транспорт добавлен");
+            manager.addTransport(hubName,transport);
         }
     }
 
-    private static void toggleDevice(Scanner scanner, SmartHomeManager manager) {
-        System.out.print("ID устройства: ");
-        String id = scanner.nextLine();
+    private static void analytics(LogisticsManager manager) {
+        List<Transport> top3LowBattery = manager.getAnalysticsStream()
+                .sorted(
+                        Comparator.comparingDouble(
+                                Transport::getBatteryLevel
+                        )
+                )
+                .limit(3)
+                .collect(Collectors.toList());
 
-        Device device = manager.getDeviceById(id);
-        if (device == null) {
-            System.out.println("Устройство не найдено.");
+        if (top3LowBattery.isEmpty()) {
+            System.out.println("В сети пока нет транспорта.");
             return;
         }
 
-        System.out.println("1. Включить");
-        System.out.println("2. Выключить");
-        System.out.print("Выбор: ");
-        int action = readInt(scanner);
+        System.out.println(
+                "\n=== ТОП-3 ТРАНСПОРТА С НАИМЕНЬШИМ ЗАРЯДОМ ==="
+        );
 
-        switch (action) {
-            case 1 -> device.turnOn();
-            case 2 -> device.turnOff();
-            default -> System.out.println("Неверный выбор.");
-        }
-
-        System.out.println("Текущее состояние: " + device.isOn());
+        top3LowBattery.forEach(transport ->
+                System.out.println(transport.getDetails())
+        );
     }
 
-    private static int readInt(Scanner scanner) {
-        while (true) {
-            try {
-                return Integer.parseInt(scanner.nextLine().trim());
-            } catch (Exception e) {
-                System.out.print("Введите целое число: ");
-            }
-        }
-    }
 
-    private static double readDouble(Scanner scanner) {
-        while (true) {
-            try {
-                return Double.parseDouble(scanner.nextLine().trim().replace(',', '.'));
-            } catch (Exception e) {
-                System.out.print("Введите число: ");
-            }
-        }
-    }
+
+
 }
+

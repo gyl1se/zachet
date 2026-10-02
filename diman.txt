@@ -1,0 +1,216 @@
+public interface Manageable {
+void start();
+
+void stop();
+
+boolean isActive();
+}
+ 
+
+================================
+
+
+public abstract class CloudResource implements Manageable {
+protected String id;
+protected String name;
+protected boolean status;
+protected double loadPercentage;
+
+public CloudResource(String id, String name) {
+    this.id = id;
+    this.name = name;
+    status = false;
+    loadPercentage = 0;
+}
+
+public void start() {
+    status = true;
+}
+
+public void stop() {
+    status = false;
+}
+
+public boolean isActive() {
+    return status;
+}
+
+public abstract String getDetails();
+
+public String getId() {
+    return id;
+}
+
+public void setId(String id) {
+    this.id = id;
+}
+
+public String getName() {
+    return name;
+}
+
+public void setName(String name) {
+    this.name = name;
+}
+
+public boolean getStatus() {
+    return status;
+}
+
+public void setStatus(boolean status) {
+    this.status = status;
+}
+
+public double getLoadPercentage() {
+    return loadPercentage;
+}
+
+public void setLoadPercentage(double loadPercentage) {
+    this.loadPercentage = loadPercentage;
+}
+}
+
+
+================================
+
+public class VirtualMachine extends CloudResource {
+private int ramSize;
+
+public VirtualMachine(String id, String name, int ramSize) {
+    super(id, name);
+    this.ramSize = ramSize;
+}
+
+public int getRamSize() {
+    return ramSize;
+}
+
+public void setRamSize(int ramSize) {
+    this.ramSize = ramSize;
+}
+
+public String getDetails() {
+    return "VM: " + name +
+            ", RAM: " + ramSize +
+            " GB, Load: " + loadPercentage + "%";
+}
+}
+
+
+================================
+
+
+public class CloudDatabase extends CloudResource {
+private double storageUsed;
+
+public CloudDatabase(String id, String name, double storageUsed) {
+    super(id, name);
+    this.storageUsed = storageUsed;
+}
+
+public double getStorageUsed() {
+    return storageUsed;
+}
+
+public void setStorageUsed(double storageUsed) {
+    this.storageUsed = storageUsed;
+}
+
+public String getDetails() {
+    return "DB: " + name +
+            ", Storage: " + storageUsed +
+            " TB, Load: " + loadPercentage + "%";
+}
+}
+
+
+
+================================
+
+
+public class LoadBalancer extends CloudResource {
+private int activeConnections;
+
+public LoadBalancer(String id, String name, int activeConnections) {
+    super(id, name);
+    this.activeConnections = activeConnections;
+}
+
+public int getActiveConnections() {
+    return activeConnections;
+}
+
+public void setActiveConnections(int activeConnections) {
+    this.activeConnections = activeConnections;
+}
+
+public String getDetails() {
+    return "LB: " + name +
+            ", Connections: " + activeConnections +
+            ", Load: " + loadPercentage + "%";
+}
+}
+
+
+===============================
+
+
+import java.util.function.Consumer; import java.util.function.Predicate;
+public class ResourcePolicy<T extends CloudResource> {
+private String policyName;
+private Predicate<T> condition;
+private Consumer<T> action;
+
+public ResourcePolicy(String name,
+                      Predicate<T> condition,
+                      Consumer<T> action) {
+
+    policyName = name;
+    this.condition = condition;
+    this.action = action;
+}
+
+public void apply(T resource) {
+    if (condition.test(resource)) {
+        action.accept(resource);
+    }
+}
+
+public String getPolicyName() {
+    return policyName;
+}
+}
+
+
+
+===============================
+
+
+
+import java.util.*; import java.util.stream.Stream;
+public class CloudManager {
+private Map<String, List<CloudResource>> projects = new HashMap<>();
+private List<ResourcePolicy<?>> policies = new ArrayList<>();
+
+public void addResource(String p, CloudResource r) {
+    projects.putIfAbsent(p, new ArrayList<>());
+    projects.get(p).add(r);
+}
+
+public void addPolicy(ResourcePolicy<?> p) {
+    policies.add(p);
+}
+
+public CloudResource getResourceById(String id) {
+
+    for (List<CloudResource> list : projects.values())
+        for (CloudResource r : list)
+            if (r.getId().equals(id))
+                return r;
+
+    return null;
+}
+
+public void applyAllPolicies() {
+
+    for (List<CloudResource> list : projects.

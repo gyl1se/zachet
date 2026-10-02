@@ -1,0 +1,500 @@
+interfaces
+Controllable
+package interfaces;
+
+public interface Controllable {
+    void turnOn();
+    void turnOff();
+    boolean isOn();
+}
+
+
+logic
+Scemario
+package logic;
+
+import models.Device;
+import java.util.function.Predicate;
+import java.util.function.Consumer;
+
+public class Scenario<T extends Device> {
+    private final String name;
+    private final Predicate<T> condition;
+    private final Consumer<T> action;
+
+    public Scenario(String name, Predicate<T> condition, Consumer<T> action) {
+        this.name = name;
+        this.condition = condition;
+        this.action = action;
+    }
+
+    public void apply(T device) {
+        if (condition.test(device)) {
+            action.accept(device);
+        }
+    }
+
+    public String getName() {
+        return name;
+    }
+}
+
+
+
+
+
+logic
+SmartHomeManager
+package logic;
+
+import models.Device;
+import java.io.*;
+import java.util.*;
+import java.util.stream.Stream;
+
+public class SmartHomeManager {
+    private Map<String, List<Device>> rooms;
+    private List<Scenario<? extends Device>> scenarios;
+
+    public SmartHomeManager() {
+        rooms = new LinkedHashMap<>();
+        scenarios = new ArrayList<>();
+    }
+
+    public void addDevice(String room, Device device) {
+        rooms.computeIfAbsent(room, k -> new ArrayList<>()).add(device);
+    }
+
+    public void addScenario(Scenario<?> scenario) {
+        scenarios.add(scenario);
+    }
+
+    public Device getDeviceById(String id) {
+        return rooms.values().stream()
+                .flatMap(List::stream)
+                .filter(device -> device.getId().equals(id))
+                .findFirst()
+                .orElse(null);
+    }
+
+    public void executeAllScenarios() {
+        for (List<Device> devices : rooms.values()) {
+            for (Device device : devices) {
+                for (Scenario<?> scenario : scenarios) {
+                    applyScenario(scenario, device);
+                }
+            }
+        }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private void applyScenario(Scenario scenario, Device device) {
+        try {
+            scenario.apply(device);
+        } catch (ClassCastException ignored) {
+        }
+    }
+
+    public Stream<Device> getAnalyticsStream() {
+        return rooms.values().stream().flatMap(List::stream);
+    }
+
+    public void saveState(String filename) throws IOException {
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(filename))) {
+            oos.writeObject(rooms);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void loadState(String filename) throws IOException, ClassNotFoundException {
+        File file = new File(filename);
+        if (!file.exists()) return;
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(filename))) {
+            rooms = (Map<String, List<Device>>) ois.readObject();
+        }
+    }
+
+    public void printSummary() {
+        System.out.println("=== Общая сводка по дому ===");
+        if (rooms.isEmpty()) {
+            System.out.println("Дом пуст.");
+        } else {
+            rooms.forEach((room, devices) -> {
+                System.out.println("Комната: " + room);
+                devices.forEach(device -> System.out.println("  " + device.getDetails()));
+            });
+        }
+        System.out.println("Количество сценариев: " + scenarios.size());
+    }
+}
+
+
+main
+MAin
+import java.util.Scanner;
+
+public class Main {
+    private static final String HOME_FILE = "home_state.dat";
+    private static final Scanner scanner = new Scanner(System.in);
+
+    public static void main(String[] args) {
+        SmartHomeManager manager = new SmartHomeManager();
+        try {
+            manager.loadState(HOME_FILE);
+            System.out.println("Загрузка состояния завершена.");
+        } catch (IOException | ClassNotFoundException e) {
+            System.out.println("Ошибка загрузки состояния: " + e.getMessage());
+        }
+
+        boolean running = true;
+        while (running) {
+            printMenu();
+            int choice = readInt("Выберите пункт: ");
+            switch (choice) {
+                case 1:
+                    addDevice(manager);
+                    break;
+                case 2:
+                    toggleDevice(manager);
+                    break;
+                case 3:
+                    addPhantomScenario(manager);
+                    break;
+                case 4:
+                    addVariantScenario(manager);
+                    break;
+                case 5:
+                    executeScenarios(manager);
+                    break;
+                case 6:
+                    runAnalytics(manager);
+                    break;
+                case 7:
+                    manager.printSummary();
+                    break;
+                case 8:
+                    running = false;
+                    break;
+                default:
+                    System.out.println("Неверный пункт меню.");
+            }
+        }
+
+        try {
+            manager.saveState(HOME_FILE);
+            System.out.println("Состояние дома сохранено.");
+        } catch (IOException e) {
+            System.out.println("Ошибка сохранения состояния: " + e.getMessage());
+        }
+    }
+
+    private static void printMenu() {
+        System.out.println("\n=== Умный дом ===");
+        System.out.println("1. Добавить устройство");
+        System.out.println("2. Включить/выключить устройство");
+        System.out.println("3. Добавить сценарий \"Сброс фантомного потребления\"");
+        System.out.println("4. Добавить сценарий \"Спокойный сон\"");
+        System.out.println("5. Запустить проверку всех сценариев");
+        System.out.println("6. Выполнить аналитический запрос");
+        System.out.println("7. Общая сводка");
+        System.out.println("8. Выход");
+    }
+
+    private static void addDevice(SmartHomeManager manager) {
+        System.out.println("Выберите тип устройства:");
+        System.out.println("1 - Умная лампа");
+        System.out.println("2 - Умный термостат");
+        System.out.println("3 - Умная розетка");
+        int type = readInt("Тип: ");
+        String id = readString("ID: ");
+        String name = readString("Имя: ");
+        String room = readString("Комната: ");
+        double power = readDouble("Текущее энергопотребление (Вт): ");
+
+        Device device = null;
+        switch (type) {
+            case 1:
+                int brightness = readInt("Яркость (0-100): ");
+                String color = readString("Цвет: ");
+                device = new SmartLight(id, name, power, brightness, color);
+                break;
+            case 2:
+                double target = readDouble("Целевая температура: ");
+                device = new SmartThermostat(id, name, power, target);
+                break;
+            case 3:
+                double load = readDouble("Текущая нагрузка (Вт): ");
+                device = new SmartSocket(id, name, power, load);
+                break;
+            default:
+                System.out.println("Неверный тип устройства.");
+                return;
+        }
+        manager.addDevice(room, device);
+        System.out.println("Добавлено устройство: " + device.getDetails());
+    }
+
+    private static void toggleDevice(SmartHomeManager manager) {
+        String id = readString("Введите ID устройства: ");
+        Device device = manager.getDeviceById(id);
+        if (device == null) {
+            System.out.println("Устройство с ID '" + id + "' не найдено.");
+            return;
+        }
+        if (device.isOn()) {
+            device.turnOff();
+            System.out.println("Устройство выключено: " + device.getDetails());
+        } else {
+            device.turnOn();
+            System.out.println("Устройство включено: " + device.getDetails());
+        }
+    }
+
+    private static void addPhantomScenario(SmartHomeManager manager) {
+        Scenario<Device> phantom = new Scenario<>("Сброс фантомного потребления",
+                device -> !device.isOn() && device.getPowerConsumption() > 0,
+                device -> device.setPowerConsumption(0.0));
+        manager.addScenario(phantom);
+        System.out.println("Сценарий добавлен: " + phantom.getName());
+    }
+
+    private static void addVariantScenario(SmartHomeManager manager) {
+        Scenario<SmartLight> sleep = new Scenario<>("Спокойный сон",
+                light -> light.getBrightness() > 50,
+                light -> {
+                    light.setBrightness(10);
+                    light.setColor("Warm");
+                });
+        manager.addScenario(sleep);
+        System.out.println("Сценарий добавлен: " + sleep.getName());
+    }
+
+    private static void executeScenarios(SmartHomeManager manager) {
+        manager.executeAllScenarios();
+        System.out.println("Все сценарии выполнены.");
+    }
+
+    private static void runAnalytics(SmartHomeManager manager) {
+        double totalPower = manager.getAnalyticsStream()
+                .filter(Device::isOn)
+                .mapToDouble(Device::getPowerConsumption)
+                .sum();
+        System.out.printf("Общее энергопотребление включенных устройств: %.2f Вт%n", totalPower);
+    }
+
+    private static int readInt(String prompt) {
+        System.out.print(prompt);
+        while (!scanner.hasNextInt()) {
+            System.out.print("Введите целое число: ");
+            scanner.next();
+        }
+        int value = scanner.nextInt();
+        scanner.nextLine();
+        return value;
+    }
+
+    private static double readDouble(String prompt) {
+        System.out.print(prompt);
+        while (!scanner.hasNextDouble()) {
+            System.out.print("Введите число: ");
+            scanner.next();
+        }
+        double value = scanner.nextDouble();
+        scanner.nextLine();
+        return value;
+    }
+
+    private static String readString(String prompt) {
+        System.out.print(prompt);
+        return scanner.nextLine();
+    }
+}
+
+
+
+
+models
+Device
+package models;
+
+import interfaces.Controllable;
+import java.io.Serializable;
+
+public abstract class Device implements Controllable, Serializable {
+    private static final long serialVersionUID = 1L;
+
+    protected String id;
+    protected String name;
+    protected boolean status;
+    protected double powerConsumption;
+
+    public Device(String id, String name, double powerConsumption) {
+        this.id = id;
+        this.name = name;
+        this.powerConsumption = powerConsumption;
+        this.status = false;
+    }
+
+    public abstract String getDetails();
+
+    @Override
+    public void turnOn() {
+        this.status = true;
+    }
+
+    @Override
+    public void turnOff() {
+        this.status = false;
+    }
+
+    @Override
+    public boolean isOn() {
+        return status;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public boolean getStatus() {
+        return status;
+    }
+
+    public void setStatus(boolean status) {
+        this.status = status;
+    }
+
+    public double getPowerConsumption() {
+        return powerConsumption;
+    }
+
+    public void setPowerConsumption(double powerConsumption) {
+        this.powerConsumption = powerConsumption;
+    }
+}
+
+
+
+
+models
+SmartLight
+package models;
+
+public class SmartLight extends Device {
+    private static final long serialVersionUID = 1L;
+
+    private int brightness;
+    private String color;
+
+    public SmartLight(String id, String name, double powerConsumption, int brightness, String color) {
+        super(id, name, powerConsumption);
+        setBrightness(brightness);
+        setColor(color);
+    }
+
+    public int getBrightness() {
+        return brightness;
+    }
+
+    public void setBrightness(int brightness) {
+        if (brightness < 0) {
+            this.brightness = 0;
+        } else if (brightness > 100) {
+            this.brightness = 100;
+        } else {
+            this.brightness = brightness;
+        }
+    }
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color;
+    }
+
+    @Override
+    public String getDetails() {
+        return String.format("SmartLight{id='%s', name='%s', status=%s, powerConsumption=%.2f, brightness=%d, color='%s'}",
+                id, name, isOn() ? "включено" : "выключено", powerConsumption, brightness, color);
+    }
+}
+
+
+
+
+
+models
+SmartSocket
+package models;
+
+public class SmartSocket extends Device {
+    private static final long serialVersionUID = 1L;
+
+    private double currentLoad;
+
+    public SmartSocket(String id, String name, double powerConsumption, double currentLoad) {
+        super(id, name, powerConsumption);
+        this.currentLoad = currentLoad;
+    }
+
+    public double getCurrentLoad() {
+        return currentLoad;
+    }
+
+    public void setCurrentLoad(double currentLoad) {
+        this.currentLoad = currentLoad;
+    }
+
+    @Override
+    public String getDetails() {
+        return String.format("SmartSocket{id='%s', name='%s', status=%s, powerConsumption=%.2f, currentLoad=%.2f}",
+                id, name, isOn() ? "включено" : "выключено", powerConsumption, currentLoad);
+    }
+}
+
+
+
+
+
+models
+SmartThermostat
+package models;
+
+public class SmartThermostat extends Device {
+    private static final long serialVersionUID = 1L;
+
+    private double targetTemperature;
+
+    public SmartThermostat(String id, String name, double powerConsumption, double targetTemperature) {
+        super(id, name, powerConsumption);
+        this.targetTemperature = targetTemperature;
+    }
+
+    public double getTargetTemperature() {
+        return targetTemperature;
+    }
+
+    public void setTargetTemperature(double targetTemperature) {
+        this.targetTemperature = targetTemperature;
+    }
+
+    @Override
+    public String getDetails() {
+        return String.format("SmartThermostat{id='%s', name='%s', status=%s, powerConsumption=%.2f, targetTemperature=%.1f}",
+                id, name, isOn() ? "включено" : "выключено", powerConsumption, targetTemperature);
+    }
+}

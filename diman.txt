@@ -214,3 +214,177 @@ public CloudResource getResourceById(String id) {
 public void applyAllPolicies() {
 
     for (List<CloudResource> list : projects.
+values())
+        for (CloudResource r : list)
+            for (ResourcePolicy<?> p : policies)
+                apply(p, r);
+}
+
+private <T extends CloudResource> void apply(
+        ResourcePolicy<T> p, CloudResource r) {
+
+    try {
+        p.apply((T) r);
+    } catch (ClassCastException e) {
+        // Политика относится к другому типу ресурса
+    }
+}
+
+public Stream<CloudResource> getAnalyticsStream() {
+    return projects.values()
+            .stream()
+            .flatMap(List::stream);
+}
+}
+
+
+
+
+=================+==============
+
+
+
+import java.util.Scanner;
+public class Main {
+public static void main(String[] args) {
+
+    Scanner sc = new Scanner(System.in);
+    CloudManager manager = new CloudManager();
+
+    while (true) {
+
+        System.out.println("\n--- CLOUD MANAGER ---");
+        System.out.println("1 - Добавить ресурс");
+        System.out.println("2 - Запустить/остановить");
+        System.out.println("3 - Базовая политика");
+        System.out.println("4 - Политика варианта");
+        System.out.println("5 - Запустить политики");
+        System.out.println("6 - Аналитика");
+        System.out.println("7 - Выход");
+
+        int n = sc.nextInt();
+        sc.nextLine();
+
+        switch (n) {
+
+            case 1:
+                addResource(sc, manager);
+                break;
+
+            case 2:
+                changeStatus(sc, manager);
+                break;
+
+            case 3:
+                addBasicPolicy(manager);
+                break;
+
+            case 4:
+                System.out.println("Здесь будет политика варианта");
+                break;
+
+            case 5:
+                manager.applyAllPolicies();
+                System.out.println("Политики выполнены");
+                break;
+
+            case 6:
+                System.out.println("Здесь будет аналитика варианта");
+                break;
+
+            case 7:
+                return;
+
+            default:
+                System.out.println("Ошибка");
+        }
+    }
+}
+
+static void addResource(
+        Scanner sc, CloudManager manager) {
+
+    System.out.println("1 - VM");
+    System.out.println("2 - Database");
+    System.out.println("3 - LoadBalancer");
+
+    int type = sc.nextInt();
+    sc.nextLine();
+
+    System.out.print("ID: ");
+    String id = sc.nextLine();
+
+    System.out.print("Name: ");
+    String name = sc.nextLine();
+
+    System.out.print("Project: ");
+    String project = sc.nextLine();
+
+    CloudResource r;
+
+    if (type == 1) {
+
+        System.out.print("RAM: ");
+        int ram = sc.nextInt();
+
+        r = new VirtualMachine(id, name, ram);
+
+    } else if (type == 2) {
+
+        System.out.print("Storage: ");
+        double storage = sc.nextDouble();
+
+        r = new CloudDatabase(id, name, storage);
+
+    } else {
+
+        System.out.print("Connections: ");
+        int connections = sc.nextInt();
+
+        r = new LoadBalancer(id, name, connections);
+    }
+
+    manager.addResource(project, r);
+
+    System.out.println("Ресурс добавлен");
+}
+
+static void changeStatus(
+        Scanner sc, CloudManager manager) {
+
+    System.out.print("ID ресурса: ");
+    String id = sc.nextLine();
+
+    CloudResource r = manager.getResourceById(id);
+
+    if (r == null) {
+        System.out.println("Ресурс не найден");
+        return;
+    }
+
+    if (r.isActive()) {
+        r.stop();
+        System.out.println("Ресурс остановлен");
+    } else {
+        r.start();
+        System.out.println("Ресурс запущен");
+    }
+}
+
+static void addBasicPolicy(CloudManager manager) {
+
+    ResourcePolicy<CloudResource> p =
+            new ResourcePolicy<>(
+                    "Сброс нагрузки",
+
+                    r -> !r.isActive()
+                            && r.getLoadPercentage() > 0,
+
+                    r -> r.setLoadPercentage(0)
+            );
+
+    manager.addPolicy(p);
+
+    System.out.println("Политика добавлена");
+}
+}

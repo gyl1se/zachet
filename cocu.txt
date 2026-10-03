@@ -1,0 +1,463 @@
+package main;
+
+import java.io.*;
+import java.util.*;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+// ============================================================
+// >>> Потом перенести в: src/interfaces/Scorable.java
+//     package interfaces;
+// ============================================================
+interface Scorable {
+    double calculateScore();
+}
+
+// ============================================================
+// >>> Потом перенести в: src/models/ScholarshipApplication.java
+//     package models;
+//     import interfaces.Scorable;
+// ============================================================
+abstract class ScholarshipApplication implements Scorable, Serializable {
+    private static final long serialVersionUID = 1L;
+
+    private final int id;
+    private final int studentId;
+    private boolean awarded;
+
+    public ScholarshipApplication(int id, int studentId) {
+        if (id <= 0 || studentId <= 0) {
+            throw new IllegalArgumentException("id и studentId должны быть положительными");
+        }
+        this.id = id;
+        this.studentId = studentId;
+        this.awarded = false;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public int getStudentId() {
+        return studentId;
+    }
+
+    public boolean isAwarded() {
+        return awarded;
+    }
+
+    public void setAwarded(boolean awarded) {
+        this.awarded = awarded;
+    }
+
+    public abstract String getDetails();
+}
+
+// ============================================================
+// >>> Потом перенести в: src/models/AcademicApplication.java
+//     package models;
+// ============================================================
+class AcademicApplication extends ScholarshipApplication {
+    private static final long serialVersionUID = 1L;
+
+    private final int exam1;
+    private final int exam2;
+
+    public AcademicApplication(int id, int studentId, int exam1, int exam2) {
+        super(id, studentId);
+        if (exam1 < 0 || exam1 > 100 || exam2 < 0 || exam2 > 100) {
+            throw new IllegalArgumentException("Оценки должны быть в диапазоне 0..100");
+        }
+        this.exam1 = exam1;
+        this.exam2 = exam2;
+    }
+
+    public int getExam1() {
+        return exam1;
+    }
+
+    public int getExam2() {
+        return exam2;
+    }
+
+    @Override
+    public double calculateScore() {
+        return (exam1 + exam2) / 2.0;
+    }
+
+    @Override
+    public String getDetails() {
+        return String.format(
+                "Academic[id=%d, studentId=%d, exam1=%d, exam2=%d, score=%.1f, awarded=%s]",
+                getId(), getStudentId(), exam1, exam2, calculateScore(), isAwarded());
+    }
+}
+
+// ============================================================
+// >>> Потом перенести в: src/models/ResearchApplication.java
+//     package models;
+// ============================================================
+class ResearchApplication extends ScholarshipApplication {
+    private static final long serialVersionUID = 1L;
+
+    private final int articles;
+    private final int talks;
+
+    public ResearchApplication(int id, int studentId, int articles, int talks) {
+        super(id, studentId);
+        if (articles < 0 || articles > 5 || talks < 0 || talks > 10) {
+            throw new IllegalArgumentException("articles 0..5, talks 0..10");
+        }
+        this.articles = articles;
+        this.talks = talks;
+    }
+
+    public int getArticles() {
+        return articles;
+    }
+
+    public int getTalks() {
+        return talks;
+    }
+
+    @Override
+    public double calculateScore() {
+        return Math.min(100.0, 20.0 * articles + 10.0 * talks);
+    }
+
+    @Override
+    public String getDetails() {
+        return String.format(
+                "Research[id=%d, studentId=%d, articles=%d, talks=%d, score=%.1f, awarded=%s]",
+                getId(), getStudentId(), articles, talks, calculateScore(), isAwarded());
+    }
+}
+
+// ============================================================
+// >>> Потом перенести в: src/logic/ScholarshipManager.java
+//     package logic;
+//     import models.ScholarshipApplication;
+// ============================================================
+class ScholarshipManager<T extends ScholarshipApplication> implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    private final List<T> applications = new ArrayList<>();
+
+    // ===== Вариант 1: правило допуска =====
+    // ≥ 2 заявки, все баллы ≥ 40, хотя бы один ≥ 60
+    private final Predicate<List<T>> admissionPredicate = apps -> {
+        if (apps.size() < 2) return false;
+        boolean allGe40 = apps.stream().allMatch(a -> a.calculateScore() >= 40);
+        boolean anyGe60 = apps.stream().anyMatch(a -> a.calculateScore() >= 60);
+        return allGe40 && anyGe60;
+    };
+
+    // Рейтинг = максимальный балл заявок студента
+    private double ratingOf(List<T> apps) {
+        return apps.stream()
+                .mapToDouble(ScholarshipApplication::calculateScore)
+                .max()
+                .orElse(0.0);
+    }
+
+    public boolean add(T application) {
+        if (application == null) return false;
+        boolean exists = applications.stream()
+                .anyMatch(a -> a.getId() == application.getId());
+        if (exists) return false;
+
+        // При успешном добавлении сбрасываем предыдущие результаты назначения
+        applications.forEach(a -> a.setAwarded(false));
+        applications.add(application);
+        return true;
+    }
+
+    public List<T> allocate(int limit) {
+        if (limit < 0) {
+            throw new IllegalArgumentException("limit не может быть отрицательным");
+        }
+
+        // Полный сброс awarded
+        applications.forEach(a -> a.setAwarded(false));
+
+        // Группируем заявки по студенту
+        Map<Integer, List<T>> byStudent = applications.stream()
+                .collect(Collectors.groupingBy(ScholarshipApplication::getStudentId));
+
+        // Допускаем только подходящих студентов
+        List<Map.Entry<Integer, List<T>>> admitted = byStudent.entrySet().stream()
+                .filter(e -> admissionPredicate.test(e.getValue()))
+                .collect(Collectors.toList());
+
+        // Сортировка: рейтинг DESC, при равенстве studentId ASC
+        admitted.sort((e1, e2) -> {
+            double r1 = ratingOf(e1.getValue());
+            double r2 = ratingOf(e2.getValue());
+            int cmp = Double.compare(r2, r1);
+            if (cmp != 0) return cmp;
+            return Integer.compare(e1.getKey(), e2.getKey());
+        });
+
+        List<T> winners = new ArrayList<>();
+        int count = Math.min(limit, admitted.size());
+
+        for (int i = 0; i < count; i++) {
+            List<T> apps = admitted.get(i).getValue();
+
+            // Выбираем заявку с наибольшим баллом, при равенстве — с меньшим id
+            T best = apps.stream()
+                    .max(Comparator
+                            .comparingDouble(ScholarshipApplication::calculateScore)
+                            .thenComparingInt(a -> -a.getId()))
+                    .orElse(null);
+
+            if (best != null) {
+                best.setAwarded(true);
+                winners.add(best);
+            }
+        }
+        return winners;
+    }
+
+    public OptionalDouble getStudentRating(int studentId) {
+        if (studentId <= 0) {
+            throw new IllegalArgumentException("studentId должен быть > 0");
+        }
+
+        List<T> apps = applications.stream()
+                .filter(a -> a.getStudentId() == studentId)
+                .collect(Collectors.toList());
+
+        if (!admissionPredicate.test(apps)) {
+            return OptionalDouble.empty();
+        }
+        return OptionalDouble.of(ratingOf(apps));
+    }
+
+    public Stream<T> getAnalyticsStream() {
+        return applications.stream();
+    }
+
+    // Вспомогательные методы для Main и сериализации
+    public List<T> getAll() {
+        return new ArrayList<>(applications);
+    }
+
+    public void setApplications(List<T> list) {
+        applications.clear();
+        if (list != null) {
+            applications.addAll(list);
+        }
+    }
+}
+
+// ============================================================
+// >>> Этот класс остаётся в: src/main/Main.java
+// ============================================================
+public class Main {
+    private static final String STATE_FILE = "scholarship_state.dat";
+    private static ScholarshipManager<ScholarshipApplication> manager = new ScholarshipManager<>();
+
+    public static void main(String[] args) {
+        loadState();
+
+        Scanner sc = new Scanner(System.in);
+        boolean running = true;
+
+        while (running) {
+            printMenu();
+            String choice = sc.nextLine().trim();
+
+            try {
+                switch (choice) {
+                    case "1" -> addApplication(sc);
+                    case "2" -> showAll();
+                    case "3" -> runContest(sc);
+                    case "4" -> runAnalytics();
+                    case "5" -> {
+                        saveState();
+                        running = false;
+                        System.out.println("Выход.");
+                    }
+                    default -> System.out.println("Неверный пункт меню.");
+                }
+            } catch (Exception e) {
+                System.out.println("Ошибка: " + e.getMessage());
+            }
+        }
+        sc.close();
+    }
+
+    private static void printMenu() {
+        System.out.println("\n=== Система распределения стипендий (Вариант 1) ===");
+        System.out.println("1. Добавить заявку");
+        System.out.println("2. Показать все заявки");
+        System.out.println("3. Провести конкурс");
+        System.out.println("4. Аналитический запрос");
+        System.out.println("5. Выход");
+        System.out.print("Выберите пункт: ");
+    }
+
+    private static void addApplication(Scanner sc) {
+        try {
+            System.out.print("Тип (1 — Academic, 2 — Research): ");
+            int type = Integer.parseInt(sc.nextLine().trim());
+
+            System.out.print("id: ");
+            int id = Integer.parseInt(sc.nextLine().trim());
+
+            System.out.print("studentId: ");
+            int studentId = Integer.parseInt(sc.nextLine().trim());
+
+            ScholarshipApplication app;
+            if (type == 1) {
+                System.out.print("exam1: ");
+                int e1 = Integer.parseInt(sc.nextLine().trim());
+                System.out.print("exam2: ");
+                int e2 = Integer.parseInt(sc.nextLine().trim());
+                app = new AcademicApplication(id, studentId, e1, e2);
+            } else if (type == 2) {
+                System.out.print("articles: ");
+                int a = Integer.parseInt(sc.nextLine().trim());
+                System.out.print("talks: ");
+                int t = Integer.parseInt(sc.nextLine().trim());
+                app = new ResearchApplication(id, studentId, a, t);
+            } else {
+                System.out.println("Неверный тип.");
+                return;
+            }
+
+            if (manager.add(app)) {
+                System.out.println("Заявка добавлена.");
+            } else {
+                System.out.println("Не удалось добавить (null или дублирующий id).");
+            }
+        } catch (NumberFormatException e) {
+            System.out.println("Ошибка ввода числа.");
+        } catch (IllegalArgumentException e) {
+            System.out.println("Ошибка: " + e.getMessage());
+        }
+    }
+
+    private static void showAll() {
+        List<ScholarshipApplication> list = manager.getAll();
+        if (list.isEmpty()) {
+            System.out.println("Заявок нет.");
+            return;
+        }
+        list.forEach(a -> System.out.println(a.getDetails()));
+    }
+
+    private static void runContest(Scanner sc) {
+        try {
+            System.out.print("Введите limit: ");
+            int limit = Integer.parseInt(sc.nextLine().trim());
+
+            List<ScholarshipApplication> winners = manager.allocate(limit);
+
+            if (winners.isEmpty()) {
+                System.out.println("Победителей нет.");
+                return;
+            }
+
+            System.out.println("Победители (в порядке рейтинга):");
+            for (ScholarshipApplication w : winners) {
+                OptionalDouble rating = manager.getStudentRating(w.getStudentId());
+                System.out.printf("studentId=%d, rating=%.1f, applicationId=%d%n",
+                        w.getStudentId(),
+                        rating.orElse(0.0),
+                        w.getId());
+            }
+        } catch (NumberFormatException e) {
+            System.out.println("Ошибка ввода числа.");
+        } catch (IllegalArgumentException e) {
+            System.out.println("Ошибка: " + e.getMessage());
+        }
+    }
+
+    // ===== АНАЛИТИКА (Вариант 1) =====
+    private static void runAnalytics() {
+        System.out.println("Аналитика (Вариант 1):");
+
+        Map<Integer, Double> maxScores = manager.getAnalyticsStream()
+                .collect(Collectors.groupingBy(
+                        ScholarshipApplication::getStudentId,
+                        Collectors.mapping(
+                                Scorable::calculateScore,
+                                Collectors.maxBy(Double::compare)
+                        )
+                ))
+                .entrySet().stream()
+                .filter(e -> e.getValue().isPresent() && e.getValue().get() >= 60.0)
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        e -> e.getValue().get()
+                ));
+
+        List<Integer> top3 = maxScores.entrySet().stream()
+                .sorted((e1, e2) -> {
+                    int cmp = Double.compare(e2.getValue(), e1.getValue()); // DESC
+                    if (cmp != 0) return cmp;
+                    return Integer.compare(e1.getKey(), e2.getKey());       // ASC
+                })
+                .limit(3)
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+
+        if (top3.isEmpty()) {
+            System.out.println("Нет подходящих студентов.");
+        } else {
+            System.out.println("ID трёх студентов: " + top3);
+        }
+    }
+
+    // ===== СЕРИАЛИЗАЦИЯ =====
+    @SuppressWarnings("unchecked")
+    private static void loadState() {
+        File f = new File(STATE_FILE);
+        if (!f.exists()) {
+            initDefaultData();
+            return;
+        }
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(f))) {
+            List<ScholarshipApplication> list = (List<ScholarshipApplication>) ois.readObject();
+            manager.setApplications(list);
+            System.out.println("Состояние загружено из " + STATE_FILE);
+        } catch (Exception e) {
+            System.out.println("Ошибка чтения файла состояния: " + e.getMessage());
+            System.out.println("Используются начальные данные.");
+            initDefaultData();
+        }
+    }
+
+    private static void saveState() {
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(STATE_FILE))) {
+            oos.writeObject(manager.getAll());
+            // По условию: сообщение об успешном сохранении НЕ выводим
+        } catch (Exception e) {
+            System.out.println("Ошибка сохранения: " + e.getMessage());
+        }
+    }
+
+    private static void initDefaultData() {
+        manager = new ScholarshipManager<>();
+
+        // AcademicApplication
+        manager.add(new AcademicApplication(1, 1, 100, 100));
+        manager.add(new AcademicApplication(3, 2, 85, 85));
+        manager.add(new AcademicApplication(4, 2, 85, 85));
+        manager.add(new AcademicApplication(5, 3, 80, 80));
+        manager.add(new AcademicApplication(7, 4, 60, 60));
+        manager.add(new AcademicApplication(9, 5, 59, 59));
+        manager.add(new AcademicApplication(11, 6, 90, 90));
+        manager.add(new AcademicApplication(13, 7, 100, 100));
+
+        // ResearchApplication
+        manager.add(new ResearchApplication(2, 1, 3, 0));
+        manager.add(new ResearchApplication(6, 3, 4, 0));
+        manager.add(new ResearchApplication(8, 4, 3, 0));
+        manager.add(new ResearchApplication(10, 5, 5, 0));
+        manager.add(new ResearchApplication(12, 6, 4, 1));
+    }
+}

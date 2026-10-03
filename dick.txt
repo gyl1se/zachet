@@ -136,27 +136,182 @@ Map<String, Long> — имя класса заявки → число разли
 Вариант 1 (Личный максимум):
   Допуск: ≥2 заявки, все ≥40, хотя бы одна ≥60
   Рейтинг: максимальный балл
+private static void runAnalytics() {
+    System.out.println("Аналитика 1:");
+
+    Map<Integer, Double> maxScores = manager.getAnalyticsStream()
+            .collect(Collectors.groupingBy(
+                    ScholarshipApplication::getStudentId,
+                    Collectors.mapping(
+                            Scorable::calculateScore,
+                            Collectors.maxBy(Double::compare)
+                    )
+            ))
+            .entrySet().stream()
+            .filter(e -> e.getValue().isPresent() && e.getValue().get() >= 60.0)
+            .collect(Collectors.toMap(
+                    Map.Entry::getKey,
+                    e -> e.getValue().get()
+            ));
+
+    List<Integer> top3 = maxScores.entrySet().stream()
+            .sorted((e1, e2) -> {
+                int cmp = Double.compare(e2.getValue(), e1.getValue()); // DESC
+                if (cmp != 0) return cmp;
+                return Integer.compare(e1.getKey(), e2.getKey());       // ASC
+            })
+            .limit(3)
+            .map(Map.Entry::getKey)
+            .collect(Collectors.toList());
+
+    if (top3.isEmpty()) {
+        System.out.println("Нет подходящих студентов.");
+    } else {
+        System.out.println("ID трёх студентов: " + top3);
+    }
+}
 
 Вариант 2 (Средний результат):
   Допуск: ≥2 заявки, каждая ≥60
   Рейтинг: среднее всех баллов
+private static void runAnalytics() {
+    System.out.println("Аналитика 2:");
 
+    Map<Integer, List<ScholarshipApplication>> byStudent = manager.getAnalyticsStream()
+            .collect(Collectors.groupingBy(ScholarshipApplication::getStudentId));
+
+    List<Integer> result = byStudent.entrySet().stream()
+            .filter(e -> {
+                boolean hasAcad = e.getValue().stream().anyMatch(a -> a instanceof AcademicApplication);
+                boolean hasRes  = e.getValue().stream().anyMatch(a -> a instanceof ResearchApplication);
+                if (!hasAcad || !hasRes) return false;
+
+                double maxAcad = e.getValue().stream()
+                        .filter(a -> a instanceof AcademicApplication)
+                        .mapToDouble(Scorable::calculateScore)
+                        .max().orElse(0);
+                double maxRes = e.getValue().stream()
+                        .filter(a -> a instanceof ResearchApplication)
+                        .mapToDouble(Scorable::calculateScore)
+                        .max().orElse(0);
+
+                return Math.abs(maxAcad - maxRes) <= 10;
+            })
+            .map(Map.Entry::getKey)
+            .sorted()
+            .collect(Collectors.toList());
+
+    if (result.isEmpty()) {
+        System.out.println("Нет подходящих студентов.");
+    } else {
+        System.out.println("ID студентов: " + result);
+    }
+}
 Вариант 3 (Два направления):
   Допуск: есть учебная ≥60 И научная ≥60
   Рейтинг: полусумма лучших баллов по двум типам
+private static void runAnalytics() {
+    System.out.println("Аналитика 3:");
 
+    Map<Integer, Double> result = manager.getAnalyticsStream()
+            .collect(Collectors.groupingBy(
+                    ScholarshipApplication::getStudentId,
+                    Collectors.averagingDouble(Scorable::calculateScore)
+            ))
+            .entrySet().stream()
+            .filter(e -> manager.getAnalyticsStream()
+                    .filter(a -> a.getStudentId() == e.getKey())
+                    .count() >= 2)
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+    if (result.isEmpty()) {
+        System.out.println("Нет подходящих студентов.");
+    } else {
+        result.forEach((id, avg) ->
+                System.out.printf("studentId=%d → средний балл=%.2f%n", id, avg));
+    }
+}
 Вариант 4 (Сбалансированный профиль):
   Допуск: есть учебная ≥60 И научная ≥60
   Рейтинг: меньший из лучших баллов по двум типам
+private static void runAnalytics() {
+    System.out.println("Аналитика 4:");
 
+    Map<Integer, List<ScholarshipApplication>> byStudent = manager.getAnalyticsStream()
+            .collect(Collectors.groupingBy(ScholarshipApplication::getStudentId));
+
+    List<Integer> result = byStudent.entrySet().stream()
+            .filter(e -> e.getValue().size() >= 2)
+            .filter(e -> e.getValue().stream().allMatch(a -> a.calculateScore() >= 60))
+            .map(Map.Entry::getKey)
+            .sorted()
+            .collect(Collectors.toList());
+
+    if (result.isEmpty()) {
+        System.out.println("Нет подходящих студентов.");
+    } else {
+        System.out.println("ID студентов: " + result);
+    }
+}
 Вариант 5 (Подтверждённое достижение):
   Допуск: ≥2 заявки с баллом ≥80
   Рейтинг: среднее двух наибольших баллов
+private static void runAnalytics() {
+    System.out.println("Аналитика 5:");
 
+    // средние баллы по типам
+    double avgAcademic = manager.getAnalyticsStream()
+            .filter(a -> a instanceof AcademicApplication)
+            .mapToDouble(Scorable::calculateScore)
+            .average()
+            .orElse(0);
+
+    double avgResearch = manager.getAnalyticsStream()
+            .filter(a -> a instanceof ResearchApplication)
+            .mapToDouble(Scorable::calculateScore)
+            .average()
+            .orElse(0);
+
+    Optional<ScholarshipApplication> result = manager.getAnalyticsStream()
+            .min(Comparator
+                    .comparingDouble((ScholarshipApplication a) -> {
+                        double avg = (a instanceof AcademicApplication) ? avgAcademic : avgResearch;
+                        return Math.abs(a.calculateScore() - avg);
+                    })
+                    .thenComparingInt(ScholarshipApplication::getId)
+            );
+
+    if (result.isEmpty()) {
+        System.out.println("Нет заявок.");
+    } else {
+        System.out.println("Найденная заявка: " + result.get().getDetails());
+    }
+}
 Вариант 6 (Стабильность):
   Допуск: ≥2 заявки, каждая ≥60, max−min ≤20
   Рейтинг: наименьший балл
+private static void runAnalytics() {
+    System.out.println("Аналитика 6:");
 
+    Map<String, Long> result = new LinkedHashMap<>();
+    result.put("AcademicApplication", 0L);
+    result.put("ResearchApplication", 0L);
+
+    Map<String, Long> counted = manager.getAnalyticsStream()
+            .filter(a -> a.calculateScore() >= 60)
+            .collect(Collectors.groupingBy(
+                    a -> a.getClass().getSimpleName(),
+                    Collectors.mapping(
+                            ScholarshipApplication::getStudentId,
+                            Collectors.collectingAndThen(Collectors.toSet(), set -> (long) set.size())
+                    )
+            ));
+
+    result.putAll(counted);
+
+    result.forEach((name, count) ->
+            System.out.printf("%s → %d студентов%n", name, count));
+}
 --------------------------------------------------------------
 БАЗОВЫЕ АНАЛИТИКИ (1–6)
 --------------------------------------------------------------
